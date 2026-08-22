@@ -81,7 +81,9 @@ function scoreKlines(k){
   const atrPct=a[n]/close[n]*100;let vp=2.5;if(atrPct>=0.25&&atrPct<=1.8)vp=5;else if(atrPct>3.5)vp=1;
   total+=(vp-2.5)*(total>=50?1:-1);
 
-  return {score:Math.round(clamp(total,0,100)),price:close[n],reason:reason.slice(0,3).join(" • ")||`RSI ${r[n].toFixed(0)}`};
+  const score=Math.round(clamp(total,0,100));
+  const qualityPass=(score>=80||score<=20)&&Number.isFinite(av)&&av>=20&&rv>=1.0&&atrPct>=0.25&&atrPct<=3.5;
+  return {score,price:close[n],reason:reason.slice(0,3).join(" • ")||`RSI ${r[n].toFixed(0)}`,adx:Number.isFinite(av)?av:null,rvol:rv,atrPct,qualityPass};
 }
 async function fetchJson(url){
   const r=await fetch(url);
