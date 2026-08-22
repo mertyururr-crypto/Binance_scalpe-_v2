@@ -769,9 +769,9 @@ function renderScanResults(){
 async function runScanner(){
   const btn=$("scanNow");
   btn.disabled=true;
-  $("scanMeta").textContent="Piyasa taranıyor...";
+  $("scanMeta").textContent="Yeni piyasa taraması yapılıyor...";
   try{
-    const r=await fetch("/api/scan");
+    const r=await fetch(`/api/scan?t=${Date.now()}`,{cache:"no-store"});
     const d=await r.json();
     if(!r.ok)throw Error(d.error||"Tarama başarısız");
     scanData={strongLong:d.strongLong||[],strongShort:d.strongShort||[],btcDirection:d.btcDirection||"NEUTRAL",btcScore:d.btcScore??50};
