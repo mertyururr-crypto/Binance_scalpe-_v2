@@ -181,6 +181,71 @@ button.secondary{background:#2b333d;color:#fff}
   .scan-results{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 
+
+.scan-filters{
+  display:flex;gap:7px;margin-top:9px;overflow-x:auto;
+  scrollbar-width:none
+}
+.scan-filters::-webkit-scrollbar{display:none}
+.scan-filter{
+  width:auto;min-height:34px;flex:0 0 auto;
+  padding:0 12px;border-radius:999px;
+  background:var(--p2);color:var(--muted);
+  border:1px solid var(--border);font-size:11px;font-weight:900
+}
+.scan-filter.active{
+  background:var(--yellow);color:#111;border-color:var(--yellow)
+}
+.scan-item{
+  cursor:pointer
+}
+.scan-item:active{
+  transform:scale(.99)
+}
+.scan-action{
+  margin-top:5px;font-size:10px;color:var(--muted)
+}
+
+
+.collapsible-card{
+  padding:0;
+  overflow:hidden
+}
+.collapse-toggle{
+  width:100%;
+  min-height:52px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:12px 14px;
+  background:transparent;
+  color:var(--text);
+  border:0;
+  border-radius:0;
+  text-align:left;
+  font-size:13px;
+  font-weight:900;
+}
+.collapse-toggle .chev{
+  width:auto;
+  min-width:auto;
+  font-size:18px;
+  color:var(--muted);
+  transform:rotate(0deg);
+  transition:transform .18s ease;
+}
+.collapse-toggle[aria-expanded="true"] .chev{
+  transform:rotate(180deg);
+}
+.collapse-content{
+  display:none;
+  padding:0 13px 13px
+}
+.collapse-content.open{
+  display:block
+}
+
 </style></head>
 <body><div class="wrap">
 <div class="card"><h1>Binance Futures Scalp Analyzer</h1><div class="sub">7'li sistem + 100 puan + ortak karar + backtest</div>
@@ -188,29 +253,74 @@ button.secondary{background:#2b333d;color:#fff}
 <div id="favorites" class="favorites"></div>
 <div class="scanner">
   <div class="scanner-head">
-    <div>
-      <div class="scanner-title">CANLI GÜÇLÜ SİNYALLER</div>
-      <div id="scanMeta" class="sub">Piyasa taraması hazırlanıyor...</div>
-    </div>
+    <button id="scanCollapse" class="collapse-toggle" type="button" aria-expanded="false" style="padding:0;min-height:40px">
+      <div>
+        <div class="scanner-title">CANLI GÜÇLÜ SİNYALLER</div>
+        <div id="scanMeta" class="sub">Piyasa taraması hazırlanıyor...</div>
+      </div>
+      <span class="chev">⌄</span>
+    </button>
     <button id="scanNow" class="scan-btn" type="button">TARA</button>
   </div>
-  <div id="scanResults" class="scan-results">
-    <div class="sub">Güçlü LONG / SHORT adayları burada görünecek.</div>
+  <div id="scanCollapseContent" class="collapse-content" style="padding:0">
+    <div class="scan-filters" role="group" aria-label="Sinyal filtresi">
+      <button type="button" class="scan-filter active" data-filter="ALL">HEPSİ</button>
+      <button type="button" class="scan-filter" data-filter="LONG">LONG</button>
+      <button type="button" class="scan-filter" data-filter="SHORT">SHORT</button>
+    </div>
+    <div id="scanResults" class="scan-results">
+      <div class="sub">Güçlü LONG / SHORT adayları burada görünecek.</div>
+    </div>
   </div>
 </div>
 <div id="status" class="status" style="margin-top:9px">Hazır.</div></div>
 
 <div class="card"><div class="k">ORTAK KARAR</div><div class="signal"><div><div id="decision" class="word wait">BEKLE</div><div id="note" class="sub">Henüz analiz yapılmadı.</div></div><div><div id="commonConf" class="conf">—</div><div class="sub">ortak güven</div></div></div></div>
 
-<div class="card"><div class="k">MEVCUT 7'Lİ SİSTEM</div><div class="grid"><div class="metric"><div class="k">Sinyal</div><div id="legacySig" class="v">—</div></div><div class="metric"><div class="k">LONG</div><div id="longScore" class="v">—</div></div><div class="metric"><div class="k">SHORT</div><div id="shortScore" class="v">—</div></div><div class="metric"><div class="k">Güven</div><div id="legacyConf" class="v">—</div></div></div></div>
+<div class="card collapsible-card">
+<button class="collapse-toggle" type="button" aria-expanded="false" data-target="mevcut-7-li-si-stem">
+  <span>MEVCUT 7'Lİ SİSTEM</span><span class="chev">⌄</span>
+</button>
+<div id="mevcut-7-li-si-stem" class="collapse-content">
+<div class="k">MEVCUT 7'Lİ SİSTEM</div><div class="grid"><div class="metric"><div class="k">Sinyal</div><div id="legacySig" class="v">—</div></div><div class="metric"><div class="k">LONG</div><div id="longScore" class="v">—</div></div><div class="metric"><div class="k">SHORT</div><div id="shortScore" class="v">—</div></div><div class="metric"><div class="k">Güven</div><div id="legacyConf" class="v">—</div></div></div>
+</div>
+</div>
 
-<div class="card"><div class="k">100 PUANLIK GELİŞMİŞ SİSTEM</div><div class="grid"><div class="metric"><div class="k">Skor</div><div id="advScore" class="v">—</div></div><div class="metric" style="grid-column:span 3"><div class="k">Değerlendirme</div><div id="advLabel" class="v">—</div></div></div><div id="breakdown" class="grid" style="margin-top:10px"></div></div>
+<div class="card collapsible-card">
+<button class="collapse-toggle" type="button" aria-expanded="false" data-target="100-puanlik-geli-mi-si-stem">
+  <span>100 PUANLIK GELİŞMİŞ SİSTEM</span><span class="chev">⌄</span>
+</button>
+<div id="100-puanlik-geli-mi-si-stem" class="collapse-content">
+<div class="k">100 PUANLIK GELİŞMİŞ SİSTEM</div><div class="grid"><div class="metric"><div class="k">Skor</div><div id="advScore" class="v">—</div></div><div class="metric" style="grid-column:span 3"><div class="k">Değerlendirme</div><div id="advLabel" class="v">—</div></div></div><div id="breakdown" class="grid" style="margin-top:10px"></div>
+</div>
+</div>
 
-<div class="card"><div class="k">İŞLEM SEVİYELERİ — ONAYLI / ADAY GİRİŞ</div><div class="grid" style="margin-top:10px"><div class="metric"><div class="k">Giriş Bölgesi</div><div id="entryZone" class="v zone">—</div></div><div class="metric"><div class="k">Stop</div><div id="stop" class="v">—</div></div><div class="metric"><div class="k">TP1</div><div id="tp1" class="v">—</div></div><div class="metric"><div class="k">TP2</div><div id="tp2" class="v">—</div></div></div><div id="entryReason" class="sub" style="margin-top:9px">Ortak işlem onayı bekleniyor.</div></div>
+<div class="card collapsible-card">
+<button class="collapse-toggle" type="button" aria-expanded="false" data-target="i-lem-sevi-yeleri">
+  <span>İŞLEM SEVİYELERİ</span><span class="chev">⌄</span>
+</button>
+<div id="i-lem-sevi-yeleri" class="collapse-content">
+<div class="k">İŞLEM SEVİYELERİ — ONAYLI / ADAY GİRİŞ</div><div class="grid" style="margin-top:10px"><div class="metric"><div class="k">Giriş Bölgesi</div><div id="entryZone" class="v zone">—</div></div><div class="metric"><div class="k">Stop</div><div id="stop" class="v">—</div></div><div class="metric"><div class="k">TP1</div><div id="tp1" class="v">—</div></div><div class="metric"><div class="k">TP2</div><div id="tp2" class="v">—</div></div></div><div id="entryReason" class="sub" style="margin-top:9px">Ortak işlem onayı bekleniyor.</div>
+</div>
+</div>
 
-<div class="card"><div class="k">TEKNİK DURUM</div><div id="reasons"></div></div>
+<div class="card collapsible-card">
+<button class="collapse-toggle" type="button" aria-expanded="false" data-target="tekni-k-durum">
+  <span>TEKNİK DURUM</span><span class="chev">⌄</span>
+</button>
+<div id="tekni-k-durum" class="collapse-content">
+<div class="k">TEKNİK DURUM</div><div id="reasons"></div>
+</div>
+</div>
 
-<div class="card"><div class="bt-title">BACKTEST — AYRI DEĞERLENDİRME</div><div id="btStatus" class="status">BACKTEST butonuna basınca seçili paritenin geçmiş mumlarında üç sistem ayrı ayrı test edilir.</div><div id="btResults" class="grid" style="margin-top:10px"></div><div id="btMethod" class="bt-note"></div></div>
+<div class="card collapsible-card">
+<button class="collapse-toggle" type="button" aria-expanded="false" data-target="backtest-sonu-lari">
+  <span>BACKTEST SONUÇLARI</span><span class="chev">⌄</span>
+</button>
+<div id="backtest-sonu-lari" class="collapse-content">
+<div class="bt-title">BACKTEST — AYRI DEĞERLENDİRME</div><div id="btStatus" class="status">BACKTEST butonuna basınca seçili paritenin geçmiş mumlarında üç sistem ayrı ayrı test edilir.</div><div id="btResults" class="grid" style="margin-top:10px"></div><div id="btMethod" class="bt-note"></div>
+</div>
+</div>
 </div>
 <script>
 const $=x=>document.getElementById(x);let symbols=[];
@@ -245,19 +355,66 @@ async function backtest(){
 }
 $("analyze").onclick=analyze;$("backtest").onclick=backtest;renderFav();loadSymbols();
 
+
+
+document.querySelectorAll(".collapse-toggle[data-target]").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    const target=document.getElementById(btn.dataset.target);
+    const willOpen=!target.classList.contains("open");
+    target.classList.toggle("open",willOpen);
+    btn.setAttribute("aria-expanded",willOpen?"true":"false");
+  });
+});
+
+const scanCollapseBtn=document.getElementById("scanCollapse");
+const scanCollapseContent=document.getElementById("scanCollapseContent");
+if(scanCollapseBtn&&scanCollapseContent){
+  scanCollapseBtn.addEventListener("click",()=>{
+    const willOpen=!scanCollapseContent.classList.contains("open");
+    scanCollapseContent.classList.toggle("open",willOpen);
+    scanCollapseBtn.setAttribute("aria-expanded",willOpen?"true":"false");
+  });
+}
+
 let scanTimer=null;
+let scanData={strongLong:[],strongShort:[]};
+let scanFilter="ALL";
+
 function scanItem(x){
   const isLong=x.direction==="LONG";
   const cls=isLong?"scan-long":"scan-short";
   const label=isLong?"GÜÇLÜ LONG":"GÜÇLÜ SHORT";
-  return `<div class="scan-item">
+  return `<div class="scan-item" data-symbol="${x.symbol}">
     <div>
       <div class="scan-symbol">${x.symbol}</div>
       <div class="scan-detail">${label} • ${x.reason}<br>Fiyat: ${fmt(x.price)}</div>
+      <div class="scan-action">Dokun → pariteyi analiz alanına taşı</div>
     </div>
     <div class="scan-score ${cls}">${x.score}/100</div>
   </div>`;
 }
+
+function renderScanResults(){
+  let items=[];
+  if(scanFilter==="ALL") items=[...(scanData.strongLong||[]),...(scanData.strongShort||[])];
+  else if(scanFilter==="LONG") items=[...(scanData.strongLong||[])];
+  else items=[...(scanData.strongShort||[])];
+
+  $("scanResults").innerHTML=items.length
+    ? items.map(scanItem).join("")
+    : `<div class="scan-empty">Bu filtrede güçlü sinyal yok.</div>`;
+
+  document.querySelectorAll(".scan-item[data-symbol]").forEach(el=>{
+    el.addEventListener("click",()=>{
+      const sym=el.dataset.symbol;
+      $("symbol").value=sym;
+      $("list").classList.remove("open");
+      $("status").textContent=`${sym} seçildi. ANALİZ butonuna basabilirsin.`;
+      window.scrollTo({top:0,behavior:"smooth"});
+    });
+  });
+}
+
 async function runScanner(){
   const btn=$("scanNow");
   btn.disabled=true;
@@ -266,10 +423,8 @@ async function runScanner(){
     const r=await fetch("/api/scan");
     const d=await r.json();
     if(!r.ok)throw Error(d.error||"Tarama başarısız");
-    const items=[...(d.strongLong||[]),...(d.strongShort||[])];
-    $("scanResults").innerHTML=items.length
-      ? items.map(scanItem).join("")
-      : `<div class="scan-empty">Şu anda taranan paritelerde 80+ LONG veya 20- SHORT sinyali yok.</div>`;
+    scanData={strongLong:d.strongLong||[],strongShort:d.strongShort||[]};
+    renderScanResults();
     $("scanMeta").textContent=`${d.scanned} likit parite tarandı • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")} • 60 sn'de bir yenilenir`;
   }catch(e){
     $("scanMeta").textContent="Tarama hatası: "+e.message;
@@ -277,8 +432,16 @@ async function runScanner(){
     btn.disabled=false;
   }
 }
+
+document.querySelectorAll(".scan-filter").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    scanFilter=btn.dataset.filter;
+    document.querySelectorAll(".scan-filter").forEach(x=>x.classList.toggle("active",x===btn));
+    renderScanResults();
+  });
+});
+
 $("scanNow").addEventListener("click",runScanner);
 runScanner();
 scanTimer=setInterval(runScanner,60000);
-
 </script></body></html>
