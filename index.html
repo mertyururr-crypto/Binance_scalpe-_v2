@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Binance Futures Scalp Analyzer</title>
+<style>
+:root{--bg:#0b0e11;--panel:#151a21;--p2:#0f141a;--border:#26313d;--text:#f4f6f8;--muted:#9aa4b2;--green:#18c784;--red:#ef5350;--yellow:#f0b90b;--orange:#f59e0b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}.wrap{max-width:980px;margin:auto;padding:18px}.card{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:16px;margin-bottom:14px}h1{font-size:21px;margin:0}.sub,.status{color:var(--muted);font-size:12px}.controls{display:grid;grid-template-columns:1fr 110px auto auto;gap:9px;margin-top:14px}input,select,button{min-height:48px;border-radius:12px;font:inherit}input,select{background:var(--p2);border:1px solid var(--border);color:var(--text);padding:0 12px}button{border:0;background:var(--yellow);font-weight:900;padding:0 14px}button.secondary{background:#2b333d;color:#fff}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.metric{background:var(--p2);border:1px solid var(--border);border-radius:14px;padding:12px}.k{font-size:12px;color:var(--muted);margin-bottom:5px}.v{font-size:17px;font-weight:800}.word{font-size:37px;font-weight:900}.long{color:var(--green)}.short{color:var(--red)}.wait{color:var(--orange)}.signal{display:flex;justify-content:space-between;align-items:center;gap:12px}.conf{font-size:26px;font-weight:900}.row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:14px}.row:last-child{border-bottom:0}.pos{color:var(--green);font-weight:800}.neg{color:var(--red);font-weight:800}.neu{color:var(--muted);font-weight:800}.favorites{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.fav{min-height:34px;background:var(--p2);color:#fff;border:1px solid var(--border);border-radius:999px;font-size:12px}.picker{position:relative}.list{display:none;position:absolute;top:54px;left:0;right:0;z-index:30;max-height:340px;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:14px}.list.open{display:block}.item{padding:11px;border-bottom:1px solid var(--border);font-weight:700}.zone{font-size:15px}.bt-title{font-weight:800;margin-bottom:10px}.bt-note{font-size:11px;color:var(--muted);line-height:1.45;margin-top:10px}@media(max-width:720px){.controls{grid-template-columns:1fr 90px}.controls button{grid-column:auto}.grid{grid-template-columns:1fr 1fr}.word{font-size:32px}}
+</style></head>
+<body><div class="wrap">
+<div class="card"><h1>Binance Futures Scalp Analyzer</h1><div class="sub">7'li sistem + 100 puan + ortak karar + backtest</div>
+<div class="controls"><div class="picker"><input id="symbol" value="1000PEPEUSDT" placeholder="Parite ara..."><div id="list" class="list"></div></div><select id="interval"><option>1m</option><option>3m</option><option selected>5m</option><option>15m</option><option>1h</option></select><button id="analyze">ANLIK ANALİZ</button><button id="backtest" class="secondary">BACKTEST</button></div>
+<div id="favorites" class="favorites"></div><div id="status" class="status" style="margin-top:9px">Hazır.</div></div>
+
+<div class="card"><div class="k">ORTAK KARAR</div><div class="signal"><div><div id="decision" class="word wait">BEKLE</div><div id="note" class="sub">Henüz analiz yapılmadı.</div></div><div><div id="commonConf" class="conf">—</div><div class="sub">ortak güven</div></div></div></div>
+
+<div class="card"><div class="k">MEVCUT 7'Lİ SİSTEM</div><div class="grid"><div class="metric"><div class="k">Sinyal</div><div id="legacySig" class="v">—</div></div><div class="metric"><div class="k">LONG</div><div id="longScore" class="v">—</div></div><div class="metric"><div class="k">SHORT</div><div id="shortScore" class="v">—</div></div><div class="metric"><div class="k">Güven</div><div id="legacyConf" class="v">—</div></div></div></div>
+
+<div class="card"><div class="k">100 PUANLIK GELİŞMİŞ SİSTEM</div><div class="grid"><div class="metric"><div class="k">Skor</div><div id="advScore" class="v">—</div></div><div class="metric" style="grid-column:span 3"><div class="k">Değerlendirme</div><div id="advLabel" class="v">—</div></div></div><div id="breakdown" class="grid" style="margin-top:10px"></div></div>
+
+<div class="card"><div class="k">İŞLEM SEVİYELERİ — MANTIKLI GİRİŞ</div><div class="grid" style="margin-top:10px"><div class="metric"><div class="k">Giriş Bölgesi</div><div id="entryZone" class="v zone">—</div></div><div class="metric"><div class="k">Stop</div><div id="stop" class="v">—</div></div><div class="metric"><div class="k">TP1</div><div id="tp1" class="v">—</div></div><div class="metric"><div class="k">TP2</div><div id="tp2" class="v">—</div></div></div><div id="entryReason" class="sub" style="margin-top:9px">Ortak işlem onayı bekleniyor.</div></div>
+
+<div class="card"><div class="k">TEKNİK DURUM</div><div id="reasons"></div></div>
+
+<div class="card"><div class="bt-title">BACKTEST — AYRI DEĞERLENDİRME</div><div id="btStatus" class="status">BACKTEST butonuna basınca seçili paritenin geçmiş mumlarında üç sistem ayrı ayrı test edilir.</div><div id="btResults" class="grid" style="margin-top:10px"></div><div id="btMethod" class="bt-note"></div></div>
+</div>
+<script>
+const $=x=>document.getElementById(x);let symbols=[];
+const fav=["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","1000PEPEUSDT","1000SHIBUSDT","1000BONKUSDT"];
+function fmt(n){if(n==null||!Number.isFinite(Number(n)))return"—";n=Number(n);return n<1?n.toLocaleString("tr-TR",{maximumFractionDigits:8}):n.toLocaleString("tr-TR",{maximumFractionDigits:5})}
+function renderFav(){$("favorites").innerHTML=fav.map(s=>`<button class="fav" data-s="${s}">${s}</button>`).join("");document.querySelectorAll(".fav").forEach(b=>b.onclick=()=>{$("symbol").value=b.dataset.s;$("list").classList.remove("open")})}
+async function loadSymbols(){try{let r=await fetch("/api/symbols"),d=await r.json();symbols=d.symbols||[]}catch(e){}}
+function showList(){let q=$("symbol").value.toUpperCase(),m=symbols.filter(x=>x.symbol.includes(q)||x.baseAsset.includes(q)).slice(0,100);$("list").innerHTML=m.map(x=>`<div class="item" data-s="${x.symbol}">${x.symbol}</div>`).join("");$("list").classList.add("open");document.querySelectorAll(".item").forEach(x=>x.onclick=()=>{$("symbol").value=x.dataset.s;$("list").classList.remove("open")})}
+$("symbol").oninput=e=>{e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"");showList()};$("symbol").onfocus=showList;document.addEventListener("click",e=>{if(!e.target.closest(".picker"))$("list").classList.remove("open")});
+function setDecision(s){$("decision").textContent=s;$("decision").className="word "+(s.includes("LONG")?"long":s.includes("SHORT")?"short":"wait")}
+async function analyze(){
+ let symbol=$("symbol").value,interval=$("interval").value;$("status").textContent="Analiz ediliyor...";
+ try{let r=await fetch(`/api/analyze?symbol=${symbol}&interval=${interval}`),d=await r.json();if(!r.ok)throw Error(d.error);
+ setDecision(d.common.decision);$("note").textContent=d.common.note;$("commonConf").textContent=d.common.confidence+"%";
+ $("legacySig").textContent=d.legacy.signal;$("longScore").textContent=d.legacy.longScore+"/7";$("shortScore").textContent=d.legacy.shortScore+"/7";$("legacyConf").textContent=d.legacy.confidence+"%";
+ $("advScore").textContent=d.advanced.score+"/100";$("advLabel").textContent=d.advanced.label;
+ $("breakdown").innerHTML=d.advanced.breakdown.map(x=>`<div class="metric"><div class="k">${x.label}</div><div class="v">${x.score}/${x.max}</div><div class="sub">${x.text}</div></div>`).join("");
+ if(d.levels.entry!=null){$("entryZone").textContent=`${fmt(d.levels.entryLow)} – ${fmt(d.levels.entryHigh)}`;$("stop").textContent=fmt(d.levels.stop);$("tp1").textContent=fmt(d.levels.tp1);$("tp2").textContent=fmt(d.levels.tp2)}else{$("entryZone").textContent=$("stop").textContent=$("tp1").textContent=$("tp2").textContent="—"}
+ $("entryReason").textContent=d.levels.reason;
+ $("reasons").innerHTML=d.legacy.reasons.map(x=>`<div class="row"><span>${x.label}</span><span class="${x.bias>0?"pos":x.bias<0?"neg":"neu"}">${x.text}</span></div>`).join("");
+ $("status").textContent=`${d.symbol} • ${d.interval} • Anlık fiyat ${fmt(d.price)} • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")}`;
+ }catch(e){$("status").textContent="Hata: "+e.message}
+}
+function btCard(name,x){return `<div class="metric"><div class="k">${name}</div><div class="v">${x.winRate}% Win</div><div class="sub">${x.wins}W / ${x.losses}L • ${x.signals} sinyal<br>PF: ${x.profitFactor}</div></div>`}
+async function backtest(){
+ let symbol=$("symbol").value,interval=$("interval").value;$("btStatus").textContent="Backtest çalışıyor...";
+ try{let r=await fetch(`/api/backtest?symbol=${symbol}&interval=${interval}&limit=1000`),d=await r.json();if(!r.ok)throw Error(d.error);
+ $("btResults").innerHTML=btCard("7'li Sistem",d.legacy)+btCard("100 Puan",d.advanced)+btCard("Ortak Karar",d.common);
+ $("btStatus").textContent=`${d.symbol} • ${d.interval} • ${d.candles} mum test edildi.`;
+ $("btMethod").textContent=d.methodology;
+ }catch(e){$("btStatus").textContent="Backtest hatası: "+e.message}
+}
+$("analyze").onclick=analyze;$("backtest").onclick=backtest;renderFav();loadSymbols();
+</script></body></html>
