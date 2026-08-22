@@ -342,6 +342,36 @@ button.secondary{background:#2b333d;color:#fff}
 .signal-badge.short{color:var(--red)}
 .signal-badge.wait{color:var(--orange)}
 
+
+.chart-controls{
+  display:grid;grid-template-columns:minmax(0,1fr) 92px;
+  gap:8px
+}
+.chart-controls button{grid-column:1/-1}
+.chart-box{
+  width:100%;height:420px;min-height:320px;
+  background:var(--p2);border:1px solid var(--border);
+  border-radius:15px;overflow:hidden;margin-top:10px
+}
+.chart-legend{
+  display:flex;flex-wrap:wrap;gap:7px;margin-top:9px
+}
+.chart-chip{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:6px 8px;background:var(--p2);border:1px solid var(--border);
+  border-radius:999px;font-size:10px;color:var(--muted)
+}
+.chart-status{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.4}
+.chart-levels{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;margin-top:9px
+}
+@media(min-width:600px){
+  .chart-controls{grid-template-columns:minmax(0,1fr) 100px auto}
+  .chart-controls button{grid-column:auto}
+  .chart-levels{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+
 </style></head>
 <body>
 <div id="menuOverlay" class="menu-overlay" aria-hidden="true">
@@ -355,6 +385,7 @@ button.secondary{background:#2b333d;color:#fff}
       <button class="menu-item" type="button" data-view="recentView"><span>🕘 Son Analizler</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="notificationsView"><span>🔔 Bildirimler</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="settingsView"><span>⚙️ Ayarlar</span><span>›</span></button>
+      <button class="menu-item" type="button" data-view="chartsView"><span>📊 Grafikler</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="signalsView"><span>📈 Geçmiş Sinyaller</span><span>›</span></button>
     </div>
   </aside>
@@ -684,6 +715,7 @@ function closeMenu(){
   menuOverlay.classList.remove("open");menuOverlay.setAttribute("aria-hidden","true");
 }
 function closeView(){
+  destroyChart();
   appView.classList.remove("open");appView.setAttribute("aria-hidden","true");
 }
 $("menuOpen").addEventListener("click",openMenu);
@@ -701,6 +733,7 @@ function openAppView(view){
     recentView:"Son Analizler",
     notificationsView:"Bildirimler",
     settingsView:"Ayarlar",
+    chartsView:"Grafikler",
     signalsView:"Geçmiş Sinyaller"
   };
   $("viewTitle").textContent=titles[view]||"Menü";
@@ -723,6 +756,7 @@ function renderView(view){
   if(view==="recentView")return renderRecentView();
   if(view==="notificationsView")return renderNotificationsView();
   if(view==="settingsView")return renderSettingsView();
+  if(view==="chartsView")return renderChartsView();
   if(view==="signalsView")return renderSignalsView();
 }
 function renderFavoritesView(){
@@ -837,6 +871,174 @@ function renderNotificationsView(){
       </div>`).join(""):`<div class="empty-state">Yeni bildirim yok.</div>`}`;
   $("clearNotifs").onclick=()=>{notificationLog=[];saveJSON("bsa_notifications",notificationLog);renderNotificationsView()};
 }
+
+let tvLibPromise=null;
+let activeChart=null;
+
+function loadTradingViewCharts(){
+  if(window.LightweightCharts) return Promise.resolve(window.LightweightCharts);
+  if(tvLibPromise) return tvLibPromise;
+
+  tvLibPromise=new Promise((resolve,reject)=>{
+    const s=document.createElement("script");
+    s.src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.0.8/dist/lightweight-charts.standalone.production.js";
+    s.async=true;
+    s.onload=()=>window.LightweightCharts?resolve(window.LightweightCharts):reject(new Error("Grafik kütüphanesi yüklenemedi."));
+    s.onerror=()=>reject(new Error("TradingView Lightweight Charts indirilemedi."));
+    document.head.appendChild(s);
+  });
+  return tvLibPromise;
+}
+
+function chartLineSeries(chart,LW,options){
+  if(chart.addSeries && LW.LineSeries) return chart.addSeries(LW.LineSeries,options);
+  return chart.addLineSeries(options);
+}
+function chartCandleSeries(chart,LW,options){
+  if(chart.addSeries && LW.CandlestickSeries) return chart.addSeries(LW.CandlestickSeries,options);
+  return chart.addCandlestickSeries(options);
+}
+function addPriceLine(series,price,title){
+  if(!Number.isFinite(Number(price))) return;
+  try{
+    series.createPriceLine({
+      price:Number(price),
+      lineWidth:1,
+      lineStyle:2,
+      axisLabelVisible:true,
+      title
+    });
+  }catch(e){}
+}
+function destroyChart(){
+  if(activeChart){
+    try{activeChart.remove()}catch(e){}
+    activeChart=null;
+  }
+}
+async function drawSelectedChart(){
+  const symbol=$("chartSymbol").value.trim().toUpperCase();
+  const interval=$("chartInterval").value;
+  const box=$("chartBox"),status=$("chartStatus");
+  if(!/^[A-Z0-9]{5,20}$/.test(symbol)){status.textContent="Geçerli bir parite gir.";return}
+
+  status.textContent=`${symbol} grafiği yükleniyor...`;
+  $("chartLoad").disabled=true;
+
+  try{
+    const [LW,kr,ar]=await Promise.all([
+      loadTradingViewCharts(),
+      fetch(`/api/chart?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=300`),
+      fetch(`/api/analyze?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}`)
+    ]);
+
+    const kd=await kr.json();
+    if(!kr.ok) throw new Error(kd.error||"Grafik verisi alınamadı.");
+
+    let ad=null;
+    try{ad=await ar.json();if(!ar.ok)ad=null}catch(e){ad=null}
+
+    destroyChart();
+    box.innerHTML="";
+
+    activeChart=LW.createChart(box,{
+      width:box.clientWidth,
+      height:box.clientHeight,
+      layout:{
+        background:{type:"solid",color:"#0f141a"},
+        textColor:"#9aa4b2"
+      },
+      grid:{
+        vertLines:{color:"#1b232d"},
+        horzLines:{color:"#1b232d"}
+      },
+      rightPriceScale:{borderColor:"#26313d"},
+      timeScale:{borderColor:"#26313d",timeVisible:true,secondsVisible:false},
+      crosshair:{mode:0}
+    });
+
+    const candles=chartCandleSeries(activeChart,LW,{
+      upColor:"#18c784",downColor:"#ef5350",
+      borderUpColor:"#18c784",borderDownColor:"#ef5350",
+      wickUpColor:"#18c784",wickDownColor:"#ef5350"
+    });
+    candles.setData(kd.candles);
+
+    const ema20=chartLineSeries(activeChart,LW,{lineWidth:2,title:"EMA20"});
+    const ema50=chartLineSeries(activeChart,LW,{lineWidth:2,title:"EMA50"});
+    const ema200=chartLineSeries(activeChart,LW,{lineWidth:2,title:"EMA200"});
+    ema20.setData(kd.ema20);
+    ema50.setData(kd.ema50);
+    ema200.setData(kd.ema200);
+
+    if(ad&&ad.levels){
+      const lv=ad.levels;
+      if(lv.entryLow!=null&&lv.entryHigh!=null){
+        addPriceLine(candles,lv.entryLow,"Giriş Alt");
+        addPriceLine(candles,lv.entryHigh,"Giriş Üst");
+      }
+      addPriceLine(candles,lv.stop,"SL");
+      addPriceLine(candles,lv.tp1,"TP1");
+      addPriceLine(candles,lv.tp2,"TP2");
+
+      $("chartLevels").innerHTML=`
+        <div class="metric"><div class="k">Giriş</div><div class="v">${lv.entryLow!=null?fmt(lv.entryLow)+" – "+fmt(lv.entryHigh):"—"}</div></div>
+        <div class="metric"><div class="k">SL</div><div class="v">${fmt(lv.stop)}</div></div>
+        <div class="metric"><div class="k">TP1</div><div class="v">${fmt(lv.tp1)}</div></div>
+        <div class="metric"><div class="k">TP2</div><div class="v">${fmt(lv.tp2)}</div></div>`;
+    }else{
+      $("chartLevels").innerHTML="";
+    }
+
+    activeChart.timeScale().fitContent();
+
+    const resize=()=>{
+      if(activeChart&&box.isConnected){
+        try{activeChart.applyOptions({width:box.clientWidth,height:box.clientHeight})}catch(e){}
+      }
+    };
+    setTimeout(resize,50);
+
+    status.textContent=`${symbol} • ${interval} • ${kd.candles.length} mum • Binance Futures verisi`;
+  }catch(e){
+    status.textContent="Grafik hatası: "+e.message;
+  }finally{
+    $("chartLoad").disabled=false;
+  }
+}
+
+function renderChartsView(){
+  const current=$("symbol").value||"BTCUSDT";
+  const currentInterval=$("interval").value||"5m";
+  $("viewBody").innerHTML=`
+    <div class="menu-card">
+      <div class="menu-card-title">TradingView grafik</div>
+      <div class="menu-card-sub">Binance Futures mumları + EMA20 / EMA50 / EMA200 + analiz seviyeleri.</div>
+      <div class="chart-controls" style="margin-top:10px">
+        <input id="chartSymbol" value="${esc(current)}" placeholder="BTCUSDT">
+        <select id="chartInterval">
+          <option value="1m">1m</option><option value="3m">3m</option>
+          <option value="5m">5m</option><option value="15m">15m</option><option value="1h">1h</option>
+        </select>
+        <button id="chartLoad" class="small-btn" type="button">GRAFİĞİ AÇ</button>
+      </div>
+      <div class="chart-legend">
+        <span class="chart-chip">Mum</span>
+        <span class="chart-chip">EMA20</span>
+        <span class="chart-chip">EMA50</span>
+        <span class="chart-chip">EMA200</span>
+        <span class="chart-chip">Giriş / SL / TP</span>
+      </div>
+      <div id="chartStatus" class="chart-status">Grafik hazırlanıyor...</div>
+      <div id="chartBox" class="chart-box"></div>
+      <div id="chartLevels" class="chart-levels"></div>
+    </div>`;
+  $("chartInterval").value=currentInterval;
+  $("chartLoad").addEventListener("click",drawSelectedChart);
+  $("chartSymbol").addEventListener("keydown",e=>{if(e.key==="Enter")drawSelectedChart()});
+  setTimeout(drawSelectedChart,0);
+}
+
 function renderSettingsView(){
   $("viewBody").innerHTML=`
     <div class="menu-card">
