@@ -395,6 +395,25 @@ button.secondary{background:#2b333d;color:#fff}
   .performance-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
 
+
+/* V5 risk + performance controls */
+.list-editor{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:8px}
+.tag-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tag{display:inline-flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid var(--border);border-radius:999px;font-size:10px}
+.tag button{width:auto;min-width:24px;min-height:24px;padding:0 5px;border-radius:999px;background:#2b333d;color:#fff}
+.risk-calc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.risk-result{font-size:18px;font-weight:900}
+.hour-table{display:grid;gap:6px;margin-top:8px}
+.hour-row{display:grid;grid-template-columns:84px 1fr auto;gap:8px;align-items:center;font-size:11px}
+.hour-bar{height:8px;border-radius:999px;background:var(--p2);overflow:hidden;border:1px solid var(--border)}
+.hour-fill{height:100%;background:currentColor}
+.guard-box{display:none;margin-top:8px;padding:9px 10px;border-radius:11px;border:1px solid var(--border);font-size:11px;line-height:1.4}
+.guard-box.show{display:block}
+.net-metric{font-size:10px;color:var(--muted);margin-top:4px}
+@media(min-width:600px){
+  .risk-calc-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+
 </style></head>
 <body>
 <div id="menuOverlay" class="menu-overlay" aria-hidden="true">
@@ -410,6 +429,7 @@ button.secondary{background:#2b333d;color:#fff}
       <button class="menu-item" type="button" data-view="settingsView"><span>⚙️ Ayarlar</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="chartsView"><span>📊 Grafikler</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="performanceView"><span>📊 Performans</span><span>›</span></button>
+      <button class="menu-item" type="button" data-view="riskView"><span>🧮 Risk Hesaplayıcı</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="signalsView"><span>📈 Geçmiş Sinyaller</span><span>›</span></button>
     </div>
   </aside>
@@ -461,6 +481,7 @@ button.secondary{background:#2b333d;color:#fff}
 <div class="card"><div class="k">ORTAK KARAR</div><div class="signal"><div><div id="decision" class="word wait">BEKLE</div><div id="note" class="sub">Henüz analiz yapılmadı.</div></div><div><div id="commonConf" class="conf">—</div><div class="sub">ortak güven</div></div></div>
 <div id="conflictBox" class="conflict-box"></div>
 <div class="regime-box"><div class="regime-title">PİYASA REJİMİ</div><div id="marketRegime" class="regime-value">—</div><div id="marketRegimeNote" class="sub">Analiz sonrası belirlenir.</div></div>
+<div id="guardBox" class="guard-box"></div>
 </div>
 
 <div class="card collapsible-card">
@@ -532,8 +553,18 @@ let appSettings=loadJSON("bsa_settings",{
   notifyStrongShort:true,
   browserNotifications:false,
   defaultInterval:"5m",
-  autoAnalyzeOnSignal:false
+  autoAnalyzeOnSignal:false,
+  feePctRoundTrip:0.10,
+  slippagePctRoundTrip:0.06,
+  cooldownMinutes:20,
+  btcFilter:true,
+  shockGuard:true,
+  whitelist:[],
+  blacklist:[]
 });
+appSettings.whitelist=Array.isArray(appSettings.whitelist)?appSettings.whitelist:[];
+appSettings.blacklist=Array.isArray(appSettings.blacklist)?appSettings.blacklist:[];
+let latestAnalysis=null;
 let recentAnalyses=loadJSON("bsa_recent",[]);
 let signalHistory=loadJSON("bsa_signals",[]);
 let notificationLog=loadJSON("bsa_notifications",[]);
@@ -587,6 +618,24 @@ function updateDecisionExtras(d){
     conflict.textContent="";
   }
 
+  const guard=$("guardBox");
+  const volRow=d.advanced?.breakdown?.find(x=>x.label==="Volatilite");
+  const atrMatch2=volRow?.text?.match(/ATR\s+([\d.]+)%/);
+  const atrNow=atrMatch2?Number(atrMatch2[1]):null;
+  const btcOpposite=appSettings.btcFilter&&scanData?.btcDirection&&scanData.btcDirection!=="NEUTRAL"&&
+    ((scanData.btcDirection==="LONG"&&d.advanced?.signal==="SHORT")||(scanData.btcDirection==="SHORT"&&d.advanced?.signal==="LONG"));
+  const shock=appSettings.shockGuard&&atrNow!=null&&atrNow>3.5;
+  if(shock||btcOpposite){
+    guard.className="guard-box show quality-bad";
+    const parts=[];
+    if(shock)parts.push(`Aşırı volatilite: ATR ${atrNow.toFixed(2)}%`);
+    if(btcOpposite)parts.push(`BTC filtresi ters yönde: ${scanData.btcDirection}`);
+    guard.textContent="⛔ Koruma aktif • "+parts.join(" • ")+" • Yeni girişte temkin.";
+  }else{
+    guard.className="guard-box";
+    guard.textContent="";
+  }
+
   const rr=calcRR(d.levels,d.common?.decision);
   if(rr){
     $("rr1").textContent=rr.rr1!=null?`1:${rr.rr1.toFixed(2)}`:"—";
@@ -611,6 +660,7 @@ async function analyze(){
  updateDecisionExtras(d);
  $("reasons").innerHTML=d.legacy.reasons.map(x=>`<div class="row"><span>${x.label}</span><span class="${x.bias>0?"pos":x.bias<0?"neg":"neu"}">${x.text}</span></div>`).join("");
  $("status").textContent=`${d.symbol} • ${d.interval} • Anlık fiyat ${fmt(d.price)} • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")}`;
+ latestAnalysis=d;
  saveAnalysisRecord(d);
  saveSignalRecord(d);
  }catch(e){$("status").textContent="Hata: "+e.message}
@@ -659,11 +709,37 @@ function scanItem(x){
     <div>
       <div class="scan-symbol">${x.symbol}</div>
       <div class="scan-detail">${label} • ${x.reason}<br>Fiyat: ${fmt(x.price)}${x.adx!=null?` • ADX ${x.adx.toFixed(1)}`:""}${x.rvol!=null?` • RVOL ${x.rvol.toFixed(2)}`:""}</div>
-      <div class="quality-row">${x.qualityPass?`<span class="quality-pill quality-good">KALİTELİ</span>`:`<span class="quality-pill quality-warn">STANDART</span>`}</div>
+      <div class="quality-row">${x.qualityPass?`<span class="quality-pill quality-good">KALİTELİ</span>`:`<span class="quality-pill quality-warn">STANDART</span>`}${x.shock?`<span class="quality-pill quality-bad">AŞIRI HAREKET</span>`:""}</div>
       <div class="scan-action">Dokun → pariteyi analiz alanına taşı</div>
     </div>
     <div class="scan-score ${cls}">${x.score}/100</div>
   </div>`;
+}
+
+
+function isCoolingDown(symbol,direction){
+  const mins=Math.max(0,Number(appSettings.cooldownMinutes)||0);
+  if(!mins)return false;
+  const now=Date.now();
+  return signalHistory.some(x=>x.symbol===symbol&&x.direction===direction&&(now-new Date(x.time).getTime())<mins*60*1000);
+}
+function passesListPolicy(symbol){
+  const wl=(appSettings.whitelist||[]).map(x=>String(x).toUpperCase());
+  const bl=(appSettings.blacklist||[]).map(x=>String(x).toUpperCase());
+  if(bl.includes(symbol))return false;
+  if(wl.length&&!wl.includes(symbol))return false;
+  return true;
+}
+function passesBtcPolicy(x){
+  if(!appSettings.btcFilter||!scanData.btcDirection||scanData.btcDirection==="NEUTRAL")return true;
+  if(x.symbol==="BTCUSDT")return true;
+  return x.direction===scanData.btcDirection;
+}
+function passesShockPolicy(x){
+  return !appSettings.shockGuard||!x.shock;
+}
+function passesTradePolicy(x){
+  return passesListPolicy(x.symbol)&&passesBtcPolicy(x)&&passesShockPolicy(x)&&!isCoolingDown(x.symbol,x.direction);
 }
 
 function renderScanResults(){
@@ -672,6 +748,7 @@ function renderScanResults(){
   else if(scanFilter==="LONG") items=[...(scanData.strongLong||[])];
   else if(scanFilter==="SHORT") items=[...(scanData.strongShort||[])];
   else items=[...(scanData.strongLong||[]),...(scanData.strongShort||[])].filter(x=>x.qualityPass);
+  items=items.filter(passesTradePolicy);
 
   $("scanResults").innerHTML=items.length
     ? items.map(scanItem).join("")
@@ -697,9 +774,9 @@ async function runScanner(){
     const r=await fetch("/api/scan");
     const d=await r.json();
     if(!r.ok)throw Error(d.error||"Tarama başarısız");
-    scanData={strongLong:d.strongLong||[],strongShort:d.strongShort||[]};
+    scanData={strongLong:d.strongLong||[],strongShort:d.strongShort||[],btcDirection:d.btcDirection||"NEUTRAL",btcScore:d.btcScore??50};
     renderScanResults();
-    $("scanMeta").textContent=`${d.scanned} likit parite tarandı • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")} • ${appSettings.scanSeconds} sn'de bir yenilenir`;
+    $("scanMeta").textContent=`${d.scanned} likit parite • BTC ${d.btcDirection||"NEUTRAL"} ${d.btcScore??50}/100 • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")} • ${appSettings.scanSeconds} sn`;
     processScannerNotifications(d);
   }catch(e){
     $("scanMeta").textContent="Tarama hatası: "+e.message;
@@ -752,6 +829,8 @@ function saveSignalRecord(d){
     entryLow:d.levels?.entryLow??null,entryHigh:d.levels?.entryHigh??null,
     stop:d.levels?.stop??null,tp1:d.levels?.tp1??null,tp2:d.levels?.tp2??null,
     source:d.levels?.source||"",
+    feePctRoundTrip:Number(appSettings.feePctRoundTrip)||0,
+    slippagePctRoundTrip:Number(appSettings.slippagePctRoundTrip)||0,
     outcome:"AÇIK", outcomeTime:null,
     time:d.timestamp||new Date().toISOString()
   };
@@ -828,6 +907,7 @@ function openAppView(view){
     settingsView:"Ayarlar",
     chartsView:"Grafikler",
     performanceView:"Performans",
+    riskView:"Risk Hesaplayıcı",
     signalsView:"Geçmiş Sinyaller"
   };
   $("viewTitle").textContent=titles[view]||"Menü";
@@ -852,6 +932,7 @@ function renderView(view){
   if(view==="settingsView")return renderSettingsView();
   if(view==="chartsView")return renderChartsView();
   if(view==="performanceView")return renderPerformanceView();
+  if(view==="riskView")return renderRiskView();
   if(view==="signalsView")return renderSignalsView();
 }
 async function renderFavoritesView(){
@@ -1008,50 +1089,116 @@ function renderNotificationsView(){
 }
 
 
+function signalR(x){
+  if(!["TP1","TP2","SL"].includes(x.outcome))return null;
+  const entry=(Number(x.entryLow)+Number(x.entryHigh))/2;
+  const stop=Number(x.stop),tp1=Number(x.tp1),tp2=Number(x.tp2);
+  const risk=Math.abs(entry-stop);
+  if(!Number.isFinite(entry)||!Number.isFinite(risk)||risk<=0)return null;
+  let gross=x.outcome==="SL"?-1:(x.outcome==="TP2"&&Number.isFinite(tp2)?Math.abs(tp2-entry)/risk:Math.abs(tp1-entry)/risk);
+  const costPct=(Number(x.feePctRoundTrip??appSettings.feePctRoundTrip)||0)+(Number(x.slippagePctRoundTrip??appSettings.slippagePctRoundTrip)||0);
+  const costR=(entry*(costPct/100))/risk;
+  return gross-costR;
+}
 async function renderPerformanceView(){
   $("viewBody").innerHTML=`<div class="empty-state">Performans için sinyal sonuçları güncelleniyor...</div>`;
   await refreshSignalOutcomes(30);
   const done=signalHistory.filter(x=>["TP1","TP2","SL"].includes(x.outcome));
-  const wins=done.filter(x=>["TP1","TP2"].includes(x.outcome));
-  const losses=done.filter(x=>x.outcome==="SL");
-  const longs=done.filter(x=>x.direction==="LONG"), shorts=done.filter(x=>x.direction==="SHORT");
-  const longWins=longs.filter(x=>["TP1","TP2"].includes(x.outcome)).length;
-  const shortWins=shorts.filter(x=>["TP1","TP2"].includes(x.outcome)).length;
-  const tp1=done.filter(x=>x.outcome==="TP1").length,tp2=done.filter(x=>x.outcome==="TP2").length;
+  const rows=done.map(x=>({...x,r:signalR(x)})).filter(x=>Number.isFinite(x.r));
+  const wins=rows.filter(x=>x.r>0),losses=rows.filter(x=>x.r<=0);
+  const sum=a=>a.reduce((s,x)=>s+x,0);
+  const totalR=sum(rows.map(x=>x.r));
+  const grossWins=sum(wins.map(x=>x.r));
+  const grossLoss=Math.abs(sum(losses.map(x=>x.r)));
+  const pf=grossLoss?grossWins/grossLoss:(grossWins?99:null);
+  const expectancy=rows.length?totalR/rows.length:null;
+
+  let equity=0,peak=0,maxDD=0;
+  [...rows].reverse().forEach(x=>{
+    equity+=x.r; peak=Math.max(peak,equity); maxDD=Math.max(maxDD,peak-equity);
+  });
+
+  const longs=rows.filter(x=>x.direction==="LONG"),shorts=rows.filter(x=>x.direction==="SHORT");
+  const longWins=longs.filter(x=>x.r>0).length,shortWins=shorts.filter(x=>x.r>0).length;
   const rate=(a,b)=>b?Math.round(a/b*100):0;
 
-  const bySymbol={};
-  for(const x of done){
-    bySymbol[x.symbol]??={n:0,w:0};
-    bySymbol[x.symbol].n++;
-    if(x.outcome==="TP1"||x.outcome==="TP2")bySymbol[x.symbol].w++;
+  const bySymbol={},byInterval={},byHour={};
+  for(const x of rows){
+    bySymbol[x.symbol]??={n:0,w:0,r:0};bySymbol[x.symbol].n++;bySymbol[x.symbol].r+=x.r;if(x.r>0)bySymbol[x.symbol].w++;
+    byInterval[x.interval]??={n:0,w:0,r:0};byInterval[x.interval].n++;byInterval[x.interval].r+=x.r;if(x.r>0)byInterval[x.interval].w++;
+    const h=new Date(x.time).getHours();
+    const bucket=`${String(Math.floor(h/3)*3).padStart(2,"0")}:00–${String(Math.floor(h/3)*3+3).padStart(2,"0")}:00`;
+    byHour[bucket]??={n:0,w:0,r:0};byHour[bucket].n++;byHour[bucket].r+=x.r;if(x.r>0)byHour[bucket].w++;
   }
-  const bestSymbol=Object.entries(bySymbol).sort((a,b)=>(b[1].w/b[1].n)-(a[1].w/a[1].n))[0];
+  const bestSymbol=Object.entries(bySymbol).filter(([,v])=>v.n>=2).sort((a,b)=>(b[1].r/b[1].n)-(a[1].r/a[1].n))[0];
+  const bestInterval=Object.entries(byInterval).filter(([,v])=>v.n>=2).sort((a,b)=>(b[1].r/b[1].n)-(a[1].r/a[1].n))[0];
 
-  const byInterval={};
-  for(const x of done){
-    byInterval[x.interval]??={n:0,w:0};
-    byInterval[x.interval].n++;
-    if(x.outcome==="TP1"||x.outcome==="TP2")byInterval[x.interval].w++;
-  }
-  const bestInterval=Object.entries(byInterval).sort((a,b)=>(b[1].w/b[1].n)-(a[1].w/a[1].n))[0];
+  const hourHtml=Object.entries(byHour).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,v])=>{
+    const wr=rate(v.w,v.n);
+    return `<div class="hour-row"><span>${k}</span><div class="hour-bar"><div class="hour-fill" style="width:${wr}%"></div></div><span>${wr}% • ${v.n}</span></div>`;
+  }).join("");
 
   $("viewBody").innerHTML=`
     <div class="performance-grid">
-      <div class="menu-card"><div class="menu-card-sub">Tamamlanan</div><div class="performance-big">${done.length}</div></div>
-      <div class="menu-card"><div class="menu-card-sub">Kazanma oranı</div><div class="performance-big">${rate(wins.length,done.length)}%</div></div>
-      <div class="menu-card"><div class="menu-card-sub">TP1 / TP2</div><div class="performance-big">${tp1} / ${tp2}</div></div>
-      <div class="menu-card"><div class="menu-card-sub">SL</div><div class="performance-big">${losses.length}</div></div>
+      <div class="menu-card"><div class="menu-card-sub">Tamamlanan</div><div class="performance-big">${rows.length}</div></div>
+      <div class="menu-card"><div class="menu-card-sub">Net win rate</div><div class="performance-big">${rate(wins.length,rows.length)}%</div></div>
+      <div class="menu-card"><div class="menu-card-sub">Expectancy</div><div class="performance-big">${expectancy!=null?expectancy.toFixed(2)+"R":"—"}</div></div>
+      <div class="menu-card"><div class="menu-card-sub">Profit Factor</div><div class="performance-big">${pf!=null?(pf>=99?"99+":pf.toFixed(2)):"—"}</div></div>
+      <div class="menu-card"><div class="menu-card-sub">Net toplam</div><div class="performance-big">${totalR.toFixed(2)}R</div></div>
+      <div class="menu-card"><div class="menu-card-sub">Max Drawdown</div><div class="performance-big">${maxDD.toFixed(2)}R</div></div>
+      <div class="menu-card"><div class="menu-card-sub">LONG</div><div class="performance-big">${rate(longWins,longs.length)}%</div></div>
+      <div class="menu-card"><div class="menu-card-sub">SHORT</div><div class="performance-big">${rate(shortWins,shorts.length)}%</div></div>
     </div>
     <div class="menu-card">
-      <div class="menu-card-title">Yön performansı</div>
-      <div class="menu-card-sub" style="margin-top:7px">LONG: ${rate(longWins,longs.length)}% (${longWins}/${longs.length}) • SHORT: ${rate(shortWins,shorts.length)}% (${shortWins}/${shorts.length})</div>
+      <div class="menu-card-title">Saat bazlı performans</div>
+      <div class="menu-card-sub">3 saatlik gruplar • sonuçlanan sinyaller</div>
+      <div class="hour-table">${hourHtml||'<div class="menu-card-sub">Yeterli veri yok.</div>'}</div>
     </div>
     <div class="menu-card">
       <div class="menu-card-title">En iyi gözlenenler</div>
-      <div class="menu-card-sub" style="margin-top:7px">Parite: ${bestSymbol?`${esc(bestSymbol[0])} • ${rate(bestSymbol[1].w,bestSymbol[1].n)}%`:"Yeterli veri yok"}<br>Zaman dilimi: ${bestInterval?`${esc(bestInterval[0])} • ${rate(bestInterval[1].w,bestInterval[1].n)}%`:"Yeterli veri yok"}</div>
+      <div class="menu-card-sub" style="margin-top:7px">Parite: ${bestSymbol?`${esc(bestSymbol[0])} • ${(bestSymbol[1].r/bestSymbol[1].n).toFixed(2)}R/işlem`:"Yeterli veri yok"}<br>Zaman dilimi: ${bestInterval?`${esc(bestInterval[0])} • ${(bestInterval[1].r/bestInterval[1].n).toFixed(2)}R/işlem`:"Yeterli veri yok"}</div>
     </div>
-    <div class="menu-card"><div class="menu-card-sub">Bu ekran yalnızca uygulamanın kaydettiği ve sonucu belirlenebilen sinyalleri ölçer; geçmiş performans gelecekteki sonucu garanti etmez.</div></div>`;
+    <div class="menu-card"><div class="menu-card-sub">Net R hesabında ayarlardaki komisyon + slippage tahmini düşülür. Bar bazlı sonuç takibi tick-level kesinlik sağlamaz.</div></div>`;
+}
+
+function renderRiskView(){
+  const d=latestAnalysis;
+  const lv=d?.levels||{};
+  const defEntry=lv.entry??(lv.entryLow!=null&&lv.entryHigh!=null?(Number(lv.entryLow)+Number(lv.entryHigh))/2:"");
+  $("viewBody").innerHTML=`
+    <div class="menu-card">
+      <div class="menu-card-title">Pozisyon Boyutu Hesaplayıcı</div>
+      <div class="menu-card-sub">Bakiyenin kaçını riske attığını giriş ve stop mesafesine göre hesaplar. Kaldıraç riski azaltmaz; sadece gereken marjı değiştirir.</div>
+      <div class="risk-calc-grid" style="margin-top:10px">
+        <label><div class="menu-card-sub">Bakiye USDT</div><input id="riskBalance" type="number" inputmode="decimal" value="1000"></label>
+        <label><div class="menu-card-sub">Risk %</div><input id="riskPercent" type="number" inputmode="decimal" step="0.1" value="1"></label>
+        <label><div class="menu-card-sub">Giriş</div><input id="riskEntry" type="number" inputmode="decimal" step="any" value="${defEntry??""}"></label>
+        <label><div class="menu-card-sub">Stop</div><input id="riskStop" type="number" inputmode="decimal" step="any" value="${lv.stop??""}"></label>
+        <label><div class="menu-card-sub">Kaldıraç</div><input id="riskLev" type="number" inputmode="numeric" value="5" min="1" max="125"></label>
+      </div>
+      <button id="riskCalcBtn" class="small-btn" type="button" style="margin-top:10px;width:100%">HESAPLA</button>
+    </div>
+    <div id="riskCalcResult"></div>`;
+  $("riskCalcBtn").onclick=()=>{
+    const bal=Number($("riskBalance").value),rp=Number($("riskPercent").value),entry=Number($("riskEntry").value),stop=Number($("riskStop").value),lev=Math.max(1,Number($("riskLev").value)||1);
+    if(!(bal>0&&rp>0&&rp<=10&&entry>0&&stop>0&&entry!==stop)){
+      $("riskCalcResult").innerHTML=`<div class="empty-state">Geçerli bakiye, %0–10 arası risk, giriş ve stop gir.</div>`;return;
+    }
+    const riskUsd=bal*rp/100;
+    const stopPct=Math.abs(entry-stop)/entry;
+    const notional=riskUsd/stopPct;
+    const qty=notional/entry;
+    const margin=notional/lev;
+    const costs=notional*((Number(appSettings.feePctRoundTrip)||0)+(Number(appSettings.slippagePctRoundTrip)||0))/100;
+    $("riskCalcResult").innerHTML=`
+      <div class="performance-grid">
+        <div class="menu-card"><div class="menu-card-sub">Maks zarar hedefi</div><div class="risk-result">${riskUsd.toFixed(2)} USDT</div></div>
+        <div class="menu-card"><div class="menu-card-sub">Pozisyon büyüklüğü</div><div class="risk-result">${notional.toFixed(2)} USDT</div></div>
+        <div class="menu-card"><div class="menu-card-sub">Tahmini miktar</div><div class="risk-result">${qty.toFixed(6)}</div></div>
+        <div class="menu-card"><div class="menu-card-sub">Yaklaşık marj (${lev}x)</div><div class="risk-result">${margin.toFixed(2)} USDT</div></div>
+      </div>
+      <div class="menu-card"><div class="menu-card-sub">Tahmini round-trip komisyon + slippage: ${costs.toFixed(2)} USDT. Gerçek Binance ücretleri hesap seviyene ve emir tipine göre değişebilir.</div></div>`;
+  };
 }
 
 let tvLibPromise=null;
@@ -1291,6 +1438,36 @@ function renderSettingsView(){
         <span class="quality-pill quality-good">AKTİF</span>
       </div>
       <div class="setting-row">
+        <div><div class="setting-label">Round-trip komisyon %</div><div class="setting-desc">Performans ve risk hesabında maliyet tahmini.</div></div>
+        <input id="setFee" type="number" step="0.01" min="0" max="2" style="width:90px">
+      </div>
+      <div class="setting-row">
+        <div><div class="setting-label">Round-trip slippage %</div><div class="setting-desc">Giriş + çıkış toplam kayma tahmini.</div></div>
+        <input id="setSlip" type="number" step="0.01" min="0" max="2" style="width:90px">
+      </div>
+      <div class="setting-row">
+        <div><div class="setting-label">Sinyal cooldown</div><div class="setting-desc">Aynı parite/yönde yeni sinyal için bekleme süresi.</div></div>
+        <select id="setCooldown"><option value="0">Kapalı</option><option value="15">15 dk</option><option value="20">20 dk</option><option value="30">30 dk</option><option value="60">60 dk</option></select>
+      </div>
+      <div class="setting-row">
+        <div><div class="setting-label">BTC yön filtresi</div><div class="setting-desc">Altcoin güçlü sinyali BTC yönüne tersse canlı listeden gizle.</div></div>
+        <input id="setBtcFilter" type="checkbox">
+      </div>
+      <div class="setting-row">
+        <div><div class="setting-label">Aşırı hareket koruması</div><div class="setting-desc">ATR / anormal mum hareketinde sinyali filtrele.</div></div>
+        <input id="setShockGuard" type="checkbox">
+      </div>
+      <div class="setting-row" style="display:block">
+        <div><div class="setting-label">Beyaz liste</div><div class="setting-desc">Boşsa tüm pariteler. Doluysa yalnız bunları canlı taramada göster.</div></div>
+        <div class="list-editor"><input id="whiteInput" placeholder="BTCUSDT"><button id="whiteAdd" class="small-btn" type="button">EKLE</button></div>
+        <div id="whiteTags" class="tag-list"></div>
+      </div>
+      <div class="setting-row" style="display:block">
+        <div><div class="setting-label">Kara liste</div><div class="setting-desc">Bu pariteler canlı güçlü sinyal listesinden çıkarılır.</div></div>
+        <div class="list-editor"><input id="blackInput" placeholder="1000PEPEUSDT"><button id="blackAdd" class="small-btn" type="button">EKLE</button></div>
+        <div id="blackTags" class="tag-list"></div>
+      </div>
+      <div class="setting-row">
         <div><div class="setting-label">Sinyale dokununca otomatik analiz</div><div class="setting-desc">Canlı sinyal kartına dokununca ANALİZ'i otomatik çalıştır.</div></div>
         <input id="setAutoAnalyze" type="checkbox">
       </div>
@@ -1304,15 +1481,39 @@ function renderSettingsView(){
   $("setLongNotif").checked=!!appSettings.notifyStrongLong;
   $("setShortNotif").checked=!!appSettings.notifyStrongShort;
   $("setAutoAnalyze").checked=!!appSettings.autoAnalyzeOnSignal;
+  $("setFee").value=Number(appSettings.feePctRoundTrip??0.10);
+  $("setSlip").value=Number(appSettings.slippagePctRoundTrip??0.06);
+  $("setCooldown").value=String(appSettings.cooldownMinutes??20);
+  $("setBtcFilter").checked=!!appSettings.btcFilter;
+  $("setShockGuard").checked=!!appSettings.shockGuard;
+  function renderPolicyTags(){
+    $("whiteTags").innerHTML=(appSettings.whitelist||[]).map(s=>`<span class="tag">${esc(s)} <button type="button" class="tag-del-white" data-s="${esc(s)}">×</button></span>`).join("");
+    $("blackTags").innerHTML=(appSettings.blacklist||[]).map(s=>`<span class="tag">${esc(s)} <button type="button" class="tag-del-black" data-s="${esc(s)}">×</button></span>`).join("");
+    document.querySelectorAll(".tag-del-white").forEach(b=>b.onclick=()=>{appSettings.whitelist=appSettings.whitelist.filter(x=>x!==b.dataset.s);saveJSON("bsa_settings",appSettings);renderPolicyTags()});
+    document.querySelectorAll(".tag-del-black").forEach(b=>b.onclick=()=>{appSettings.blacklist=appSettings.blacklist.filter(x=>x!==b.dataset.s);saveJSON("bsa_settings",appSettings);renderPolicyTags()});
+  }
+  const addPolicy=(type,inputId)=>{
+    const s=$(inputId).value.trim().toUpperCase().replace(/[^A-Z0-9]/g,"");if(!s)return;
+    appSettings[type]=uniqueBySymbol([...(appSettings[type]||[]),s]).slice(0,30);
+    saveJSON("bsa_settings",appSettings);$(inputId).value="";renderPolicyTags();
+  };
+  $("whiteAdd").onclick=()=>addPolicy("whitelist","whiteInput");
+  $("blackAdd").onclick=()=>addPolicy("blacklist","blackInput");
+  renderPolicyTags();
   const saveSettings=()=>{
     appSettings.scanSeconds=Number($("setScan").value);
     appSettings.defaultInterval=$("setInterval").value;
     appSettings.notifyStrongLong=$("setLongNotif").checked;
     appSettings.notifyStrongShort=$("setShortNotif").checked;
     appSettings.autoAnalyzeOnSignal=$("setAutoAnalyze").checked;
-    saveJSON("bsa_settings",appSettings);restartScannerTimer();
+    appSettings.feePctRoundTrip=Math.max(0,Math.min(2,Number($("setFee").value)||0));
+    appSettings.slippagePctRoundTrip=Math.max(0,Math.min(2,Number($("setSlip").value)||0));
+    appSettings.cooldownMinutes=Number($("setCooldown").value)||0;
+    appSettings.btcFilter=$("setBtcFilter").checked;
+    appSettings.shockGuard=$("setShockGuard").checked;
+    saveJSON("bsa_settings",appSettings);restartScannerTimer();renderScanResults();
   };
-  ["setScan","setInterval","setLongNotif","setShortNotif","setAutoAnalyze"].forEach(id=>$(id).addEventListener("change",saveSettings));
+  ["setScan","setInterval","setLongNotif","setShortNotif","setAutoAnalyze","setFee","setSlip","setCooldown","setBtcFilter","setShockGuard"].forEach(id=>$(id).addEventListener("change",saveSettings));
   $("browserNotifBtn").onclick=async()=>{
     if(!("Notification" in window)){alert("Bu cihaz/tarayıcı web bildirimini desteklemiyor.");return}
     try{
