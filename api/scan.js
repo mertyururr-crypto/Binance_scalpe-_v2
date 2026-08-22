@@ -121,7 +121,7 @@ export default async function handler(req,res){
     const strongLong=results.filter(x=>x.score>=80).sort((a,b)=>b.score-a.score).slice(0,8).map(x=>({...x,direction:"LONG"}));
     const strongShort=results.filter(x=>x.score<=20).sort((a,b)=>a.score-b.score).slice(0,8).map(x=>({...x,direction:"SHORT"}));
 
-    res.setHeader("Cache-Control","s-maxage=30, stale-while-revalidate=30");
+    res.setHeader("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");
     return res.status(200).json({
       scanned:results.length,
       btcScore,btcDirection,
