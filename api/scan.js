@@ -82,8 +82,10 @@ function scoreKlines(k){
   total+=(vp-2.5)*(total>=50?1:-1);
 
   const score=Math.round(clamp(total,0,100));
-  const qualityPass=(score>=80||score<=20)&&Number.isFinite(av)&&av>=20&&rv>=1.0&&atrPct>=0.25&&atrPct<=3.5;
-  return {score,price:close[n],reason:reason.slice(0,3).join(" • ")||`RSI ${r[n].toFixed(0)}`,adx:Number.isFinite(av)?av:null,rvol:rv,atrPct,qualityPass};
+  const candleRangePct=(high[n]-low[n])/close[n]*100;
+  const shock=atrPct>3.5 || (Number.isFinite(a[n]) && (high[n]-low[n])>2.5*a[n]);
+  const qualityPass=(score>=80||score<=20)&&Number.isFinite(av)&&av>=20&&rv>=1.0&&atrPct>=0.25&&atrPct<=3.5&&!shock;
+  return {score,price:close[n],reason:reason.slice(0,3).join(" • ")||`RSI ${r[n].toFixed(0)}`,adx:Number.isFinite(av)?av:null,rvol:rv,atrPct,candleRangePct,shock,qualityPass};
 }
 async function fetchJson(url){
   const r=await fetch(url);
@@ -113,12 +115,16 @@ export default async function handler(req,res){
       results.push(...data.filter(Boolean));
     }
 
-    const strongLong=results.filter(x=>x.score>=80).sort((a,b)=>b.score-a.score).slice(0,6).map(x=>({...x,direction:"LONG"}));
-    const strongShort=results.filter(x=>x.score<=20).sort((a,b)=>a.score-b.score).slice(0,6).map(x=>({...x,direction:"SHORT"}));
+    const btc=results.find(x=>x.symbol==="BTCUSDT")||null;
+    const btcScore=btc?.score??50;
+    const btcDirection=btcScore>=65?"LONG":btcScore<=35?"SHORT":"NEUTRAL";
+    const strongLong=results.filter(x=>x.score>=80).sort((a,b)=>b.score-a.score).slice(0,8).map(x=>({...x,direction:"LONG"}));
+    const strongShort=results.filter(x=>x.score<=20).sort((a,b)=>a.score-b.score).slice(0,8).map(x=>({...x,direction:"SHORT"}));
 
     res.setHeader("Cache-Control","s-maxage=30, stale-while-revalidate=30");
     return res.status(200).json({
       scanned:results.length,
+      btcScore,btcDirection,
       strongLong,strongShort,
       timestamp:new Date().toISOString()
     });
