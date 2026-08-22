@@ -1,12 +1,154 @@
 <!doctype html>
 <html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Binance Futures Scalp Analyzer</title>
 <style>
-:root{--bg:#0b0e11;--panel:#151a21;--p2:#0f141a;--border:#26313d;--text:#f4f6f8;--muted:#9aa4b2;--green:#18c784;--red:#ef5350;--yellow:#f0b90b;--orange:#f59e0b}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}.wrap{max-width:980px;margin:auto;padding:18px}.card{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:16px;margin-bottom:14px}h1{font-size:21px;margin:0}.sub,.status{color:var(--muted);font-size:12px}.controls{display:grid;grid-template-columns:1fr 110px auto auto;gap:9px;margin-top:14px}input,select,button{min-height:48px;border-radius:12px;font:inherit}input,select{background:var(--p2);border:1px solid var(--border);color:var(--text);padding:0 12px}button{border:0;background:var(--yellow);font-weight:900;padding:0 14px}button.secondary{background:#2b333d;color:#fff}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.metric{background:var(--p2);border:1px solid var(--border);border-radius:14px;padding:12px}.k{font-size:12px;color:var(--muted);margin-bottom:5px}.v{font-size:17px;font-weight:800}.word{font-size:37px;font-weight:900}.long{color:var(--green)}.short{color:var(--red)}.wait{color:var(--orange)}.signal{display:flex;justify-content:space-between;align-items:center;gap:12px}.conf{font-size:26px;font-weight:900}.row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:14px}.row:last-child{border-bottom:0}.pos{color:var(--green);font-weight:800}.neg{color:var(--red);font-weight:800}.neu{color:var(--muted);font-weight:800}.favorites{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.fav{min-height:34px;background:var(--p2);color:#fff;border:1px solid var(--border);border-radius:999px;font-size:12px}.picker{position:relative}.list{display:none;position:absolute;top:54px;left:0;right:0;z-index:30;max-height:340px;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:14px}.list.open{display:block}.item{padding:11px;border-bottom:1px solid var(--border);font-weight:700}.zone{font-size:15px}.bt-title{font-weight:800;margin-bottom:10px}.bt-note{font-size:11px;color:var(--muted);line-height:1.45;margin-top:10px}@media(max-width:720px){.controls{grid-template-columns:1fr 90px}.controls button{grid-column:auto}.grid{grid-template-columns:1fr 1fr}.word{font-size:32px}}
+:root{
+  --bg:#0b0e11;--panel:#151a21;--p2:#0f141a;--border:#26313d;
+  --text:#f4f6f8;--muted:#9aa4b2;--green:#18c784;--red:#ef5350;
+  --yellow:#f0b90b;--orange:#f59e0b
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  overflow-x:hidden
+}
+.wrap{
+  width:100%;max-width:760px;margin:0 auto;
+  padding:10px 10px calc(24px + env(safe-area-inset-bottom))
+}
+.card{
+  width:100%;min-width:0;background:var(--panel);
+  border:1px solid var(--border);border-radius:16px;
+  padding:13px;margin-bottom:10px;overflow:hidden
+}
+h1{
+  font-size:23px;line-height:1.08;margin:0 0 4px;
+  letter-spacing:-.3px
+}
+.sub,.status{
+  color:var(--muted);font-size:12px;line-height:1.4
+}
+
+/* MOBILE-FIRST: EVERYTHING STACKS */
+.controls{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 92px;
+  gap:8px;margin-top:12px
+}
+.picker{position:relative;min-width:0}
+input,select,button{
+  width:100%;min-width:0;min-height:48px;border-radius:12px;
+  font:inherit;font-size:16px
+}
+input,select{
+  background:var(--p2);border:1px solid var(--border);
+  color:var(--text);padding:0 11px
+}
+button{
+  border:0;background:var(--yellow);font-weight:900;
+  padding:0 12px;touch-action:manipulation
+}
+button.secondary{background:#2b333d;color:#fff}
+#analyze{
+  grid-column:1/-1;
+  min-height:52px;
+}
+#backtest{
+  grid-column:1/-1;
+  min-height:52px;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:8px
+}
+.metric{
+  width:100%;min-width:0;background:var(--p2);
+  border:1px solid var(--border);border-radius:13px;padding:11px
+}
+.k{
+  font-size:11px;color:var(--muted);margin-bottom:5px;
+  line-height:1.2
+}
+.v{
+  font-size:19px;line-height:1.15;font-weight:800;
+  overflow-wrap:anywhere
+}
+.word{
+  font-size:38px;line-height:.98;font-weight:900;
+  overflow-wrap:anywhere
+}
+.long{color:var(--green)}.short{color:var(--red)}.wait{color:var(--orange)}
+.signal{
+  display:flex;flex-direction:column;
+  align-items:flex-start;gap:8px
+}
+.conf{
+  font-size:28px;font-weight:900;text-align:left
+}
+.row{
+  display:flex;justify-content:space-between;align-items:flex-start;
+  gap:10px;padding:9px 0;border-bottom:1px solid var(--border);
+  font-size:13px
+}
+.row:last-child{border-bottom:0}
+.row span:first-child{min-width:0}
+.row span:last-child{
+  max-width:55%;text-align:right;overflow-wrap:anywhere
+}
+.pos{color:var(--green);font-weight:800}
+.neg{color:var(--red);font-weight:800}
+.neu{color:var(--muted);font-weight:800}
+
+.favorites{
+  display:flex;gap:7px;overflow-x:auto;flex-wrap:nowrap;
+  margin-top:9px;padding-bottom:3px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch
+}
+.favorites::-webkit-scrollbar{display:none}
+.fav{
+  width:auto;flex:0 0 auto;min-height:35px;
+  padding:0 12px;background:var(--p2);color:#fff;
+  border:1px solid var(--border);border-radius:999px;
+  font-size:12px;white-space:nowrap
+}
+.list{
+  display:none;position:absolute;top:53px;left:0;right:0;z-index:30;
+  max-height:300px;overflow:auto;background:var(--panel);
+  border:1px solid var(--border);border-radius:13px;
+  -webkit-overflow-scrolling:touch
+}
+.list.open{display:block}
+.item{padding:11px;border-bottom:1px solid var(--border);font-weight:700}
+.zone{font-size:16px}
+.bt-title{font-weight:800;margin-bottom:8px}
+.bt-note{font-size:11px;color:var(--muted);line-height:1.45;margin-top:8px}
+
+/* wider phones / tablet: only then use columns */
+@media (min-width:600px){
+  .wrap{padding:16px}
+  .card{padding:16px}
+  .controls{
+    grid-template-columns:minmax(260px,1fr) 100px 1fr 1fr
+  }
+  #analyze,#backtest{grid-column:auto}
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .signal{
+    flex-direction:row;justify-content:space-between;
+    align-items:center
+  }
+  .conf{text-align:right}
+}
+@media (min-width:850px){
+  .wrap{max-width:980px}
+  .grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
 </style></head>
 <body><div class="wrap">
 <div class="card"><h1>Binance Futures Scalp Analyzer</h1><div class="sub">7'li sistem + 100 puan + ortak karar + backtest</div>
-<div class="controls"><div class="picker"><input id="symbol" value="1000PEPEUSDT" placeholder="Parite ara..."><div id="list" class="list"></div></div><select id="interval"><option>1m</option><option>3m</option><option selected>5m</option><option>15m</option><option>1h</option></select><button id="analyze">ANLIK ANALİZ</button><button id="backtest" class="secondary">BACKTEST</button></div>
+<div class="controls"><div class="picker"><input id="symbol" value="1000PEPEUSDT" placeholder="Parite ara..."><div id="list" class="list"></div></div><select id="interval"><option>1m</option><option>3m</option><option selected>5m</option><option>15m</option><option>1h</option></select><button id="analyze">ANALİZ</button><button id="backtest" class="secondary">BACKTEST</button></div>
 <div id="favorites" class="favorites"></div><div id="status" class="status" style="margin-top:9px">Hazır.</div></div>
 
 <div class="card"><div class="k">ORTAK KARAR</div><div class="signal"><div><div id="decision" class="word wait">BEKLE</div><div id="note" class="sub">Henüz analiz yapılmadı.</div></div><div><div id="commonConf" class="conf">—</div><div class="sub">ortak güven</div></div></div></div>
