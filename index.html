@@ -480,6 +480,7 @@ button.secondary{background:#2b333d;color:#fff}
 </div>
 </div>
 </div>
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 const $=x=>document.getElementById(x);let symbols=[];
 function loadJSON(key,fallback){
@@ -881,10 +882,12 @@ function loadTradingViewCharts(){
 
   tvLibPromise=new Promise((resolve,reject)=>{
     const s=document.createElement("script");
-    s.src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.0.8/dist/lightweight-charts.standalone.production.js";
+    s.src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js";
     s.async=true;
-    s.onload=()=>window.LightweightCharts?resolve(window.LightweightCharts):reject(new Error("Grafik kütüphanesi yüklenemedi."));
-    s.onerror=()=>reject(new Error("TradingView Lightweight Charts indirilemedi."));
+    s.onload=()=>window.LightweightCharts
+      ? resolve(window.LightweightCharts)
+      : reject(new Error("TradingView grafik motoru yüklenemedi."));
+    s.onerror=()=>reject(new Error("TradingView grafik dosyasına erişilemedi."));
     document.head.appendChild(s);
   });
   return tvLibPromise;
@@ -920,32 +923,52 @@ async function drawSelectedChart(){
   const symbol=$("chartSymbol").value.trim().toUpperCase();
   const interval=$("chartInterval").value;
   const box=$("chartBox"),status=$("chartStatus");
-  if(!/^[A-Z0-9]{5,20}$/.test(symbol)){status.textContent="Geçerli bir parite gir.";return}
 
-  status.textContent=`${symbol} grafiği yükleniyor...`;
+  if(!/^[A-Z0-9]{5,20}$/.test(symbol)){
+    status.textContent="Geçerli bir parite gir.";
+    return;
+  }
+
   $("chartLoad").disabled=true;
+  let stage="başlatma";
 
   try{
-    const [LW,kr,ar]=await Promise.all([
-      loadTradingViewCharts(),
-      fetch(`/api/chart?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=300`),
-      fetch(`/api/analyze?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}`)
-    ]);
+    stage="grafik motoru";
+    status.textContent="TradingView grafik motoru hazırlanıyor...";
+    const LW=await loadTradingViewCharts();
 
+    stage="mum verisi";
+    status.textContent=`${symbol} mum verisi alınıyor...`;
+    const chartUrl="/api/chart?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval)+"&limit=300";
+    const kr=await fetch(chartUrl,{method:"GET",headers:{"Accept":"application/json"}});
     const kd=await kr.json();
     if(!kr.ok) throw new Error(kd.error||"Grafik verisi alınamadı.");
+    if(!Array.isArray(kd.candles)||!kd.candles.length) throw new Error("Mum verisi boş döndü.");
 
+    stage="analiz seviyeleri";
     let ad=null;
-    try{ad=await ar.json();if(!ar.ok)ad=null}catch(e){ad=null}
+    try{
+      const analyzeUrl="/api/analyze?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval);
+      const ar=await fetch(analyzeUrl,{method:"GET",headers:{"Accept":"application/json"}});
+      const tmp=await ar.json();
+      if(ar.ok) ad=tmp;
+    }catch(e){
+      ad=null;
+    }
 
+    stage="grafik oluşturma";
+    status.textContent="Grafik çiziliyor...";
     destroyChart();
     box.innerHTML="";
 
+    const solidType=(LW.ColorType&&LW.ColorType.Solid!==undefined)?LW.ColorType.Solid:"solid";
+    const crosshairNormal=(LW.CrosshairMode&&LW.CrosshairMode.Normal!==undefined)?LW.CrosshairMode.Normal:0;
+
     activeChart=LW.createChart(box,{
-      width:box.clientWidth,
-      height:box.clientHeight,
+      width:Math.max(280,box.clientWidth||320),
+      height:Math.max(320,box.clientHeight||420),
       layout:{
-        background:{type:"solid",color:"#0f141a"},
+        background:{type:solidType,color:"#0f141a"},
         textColor:"#9aa4b2"
       },
       grid:{
@@ -953,24 +976,36 @@ async function drawSelectedChart(){
         horzLines:{color:"#1b232d"}
       },
       rightPriceScale:{borderColor:"#26313d"},
-      timeScale:{borderColor:"#26313d",timeVisible:true,secondsVisible:false},
-      crosshair:{mode:0}
+      timeScale:{
+        borderColor:"#26313d",
+        timeVisible:true,
+        secondsVisible:false,
+        rightOffset:5,
+        barSpacing:7
+      },
+      crosshair:{mode:crosshairNormal}
     });
 
+    stage="mum serisi";
     const candles=chartCandleSeries(activeChart,LW,{
-      upColor:"#18c784",downColor:"#ef5350",
-      borderUpColor:"#18c784",borderDownColor:"#ef5350",
-      wickUpColor:"#18c784",wickDownColor:"#ef5350"
+      upColor:"#18c784",
+      downColor:"#ef5350",
+      borderUpColor:"#18c784",
+      borderDownColor:"#ef5350",
+      wickUpColor:"#18c784",
+      wickDownColor:"#ef5350"
     });
     candles.setData(kd.candles);
 
+    stage="EMA serileri";
     const ema20=chartLineSeries(activeChart,LW,{lineWidth:2,title:"EMA20"});
     const ema50=chartLineSeries(activeChart,LW,{lineWidth:2,title:"EMA50"});
     const ema200=chartLineSeries(activeChart,LW,{lineWidth:2,title:"EMA200"});
-    ema20.setData(kd.ema20);
-    ema50.setData(kd.ema50);
-    ema200.setData(kd.ema200);
+    ema20.setData(kd.ema20||[]);
+    ema50.setData(kd.ema50||[]);
+    ema200.setData(kd.ema200||[]);
 
+    stage="işlem seviyeleri";
     if(ad&&ad.levels){
       const lv=ad.levels;
       if(lv.entryLow!=null&&lv.entryHigh!=null){
@@ -983,30 +1018,38 @@ async function drawSelectedChart(){
 
       $("chartLevels").innerHTML=`
         <div class="metric"><div class="k">Giriş</div><div class="v">${lv.entryLow!=null?fmt(lv.entryLow)+" – "+fmt(lv.entryHigh):"—"}</div></div>
-        <div class="metric"><div class="k">SL</div><div class="v">${fmt(lv.stop)}</div></div>
-        <div class="metric"><div class="k">TP1</div><div class="v">${fmt(lv.tp1)}</div></div>
-        <div class="metric"><div class="k">TP2</div><div class="v">${fmt(lv.tp2)}</div></div>`;
+        <div class="metric"><div class="k">SL</div><div class="v">${lv.stop!=null?fmt(lv.stop):"—"}</div></div>
+        <div class="metric"><div class="k">TP1</div><div class="v">${lv.tp1!=null?fmt(lv.tp1):"—"}</div></div>
+        <div class="metric"><div class="k">TP2</div><div class="v">${lv.tp2!=null?fmt(lv.tp2):"—"}</div></div>`;
     }else{
       $("chartLevels").innerHTML="";
     }
 
+    stage="görünüm";
     activeChart.timeScale().fitContent();
 
-    const resize=()=>{
+    requestAnimationFrame(()=>{
       if(activeChart&&box.isConnected){
-        try{activeChart.applyOptions({width:box.clientWidth,height:box.clientHeight})}catch(e){}
+        try{
+          activeChart.applyOptions({
+            width:Math.max(280,box.clientWidth||320),
+            height:Math.max(320,box.clientHeight||420)
+          });
+        }catch(e){}
       }
-    };
-    setTimeout(resize,50);
+    });
 
-    status.textContent=`${symbol} • ${interval} • ${kd.candles.length} mum • Binance Futures verisi`;
+    status.textContent=`${symbol} • ${interval} • ${kd.candles.length} mum • Binance Futures`;
   }catch(e){
-    status.textContent="Grafik hatası: "+e.message;
+    console.error("Chart error at",stage,e);
+    status.textContent=`Grafik hatası (${stage}): ${e&&e.message?e.message:"Bilinmeyen hata"}`;
+    box.innerHTML=`<div style="padding:18px;color:var(--muted);font-size:12px;line-height:1.5">
+      Grafik oluşturulamadı. Yukarıdaki hata adımı sorunun hangi bölümde olduğunu gösterir.
+    </div>`;
   }finally{
     $("chartLoad").disabled=false;
   }
 }
-
 function renderChartsView(){
   const current=$("symbol").value||"BTCUSDT";
   const currentInterval=$("interval").value||"5m";
@@ -1030,6 +1073,7 @@ function renderChartsView(){
         <span class="chart-chip">Giriş / SL / TP</span>
       </div>
       <div id="chartStatus" class="chart-status">Grafik hazırlanıyor...</div>
+      <div class="chart-status">Charts by TradingView • Piyasa verisi: Binance Futures</div>
       <div id="chartBox" class="chart-box"></div>
       <div id="chartLevels" class="chart-levels"></div>
     </div>`;
