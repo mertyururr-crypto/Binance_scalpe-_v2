@@ -140,29 +140,63 @@ function smartLevels(d,high,low,close,n,decision){
   return {entry,entryLow:lowZone,entryHigh:highZone,stop,tp1,tp2,reason};
 }
 
+function sideOfDecision(decision){return decision.includes("LONG")?"LONG":decision.includes("SHORT")?"SHORT":null}
+function evalTrade(side,entry,atrNow,forwardHigh,forwardLow){
+  const sl=side==="LONG"?entry-1.25*atrNow:entry+1.25*atrNow;
+  const tp=side==="LONG"?entry+1.5*atrNow:entry-1.5*atrNow;
+  let outcome="OPEN";
+  for(let j=0;j<forwardHigh.length;j++){
+    const h=forwardHigh[j],l=forwardLow[j];
+    if(side==="LONG"){
+      const hitSL=l<=sl,hitTP=h>=tp;
+      if(hitSL&&hitTP){outcome="LOSS";break} // conservative same-candle assumption
+      if(hitSL){outcome="LOSS";break}
+      if(hitTP){outcome="WIN";break}
+    }else{
+      const hitSL=h>=sl,hitTP=l<=tp;
+      if(hitSL&&hitTP){outcome="LOSS";break}
+      if(hitSL){outcome="LOSS";break}
+      if(hitTP){outcome="WIN";break}
+    }
+  }
+  return outcome;
+}
+function summarize(trades){
+  const resolved=trades.filter(x=>x!=="OPEN"),wins=resolved.filter(x=>x==="WIN").length,losses=resolved.filter(x=>x==="LOSS").length;
+  const total=resolved.length,winRate=total?wins/total*100:0;
+  const grossProfit=wins*1.5,grossLoss=losses*1.25,profitFactor=grossLoss?grossProfit/grossLoss:(grossProfit>0?99:0);
+  return {signals:trades.length,resolved,wins,losses,open:trades.length-total,winRate:+winRate.toFixed(1),profitFactor:+profitFactor.toFixed(2)};
+}
 export default async function handler(req,res){
  try{
   const symbol=String(req.query.symbol||"1000PEPEUSDT").toUpperCase(),interval=String(req.query.interval||"5m");
+  const limit=clamp(parseInt(req.query.limit||"1000",10),500,1500);
   if(!/^[A-Z0-9]{5,20}$/.test(symbol))return res.status(400).json({error:"Geçersiz sembol."});
   if(!["1m","3m","5m","15m","1h"].includes(interval))return res.status(400).json({error:"Geçersiz zaman dilimi."});
-  const base="https://fapi.binance.com";
-  const [kr,tr]=await Promise.all([
-   fetch(`${base}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=300`),
-   fetch(`${base}/fapi/v1/ticker/24hr?symbol=${encodeURIComponent(symbol)}`)
-  ]);
-  if(!kr.ok||!tr.ok)return res.status(502).json({error:"Binance piyasa verisi alınamadı."});
-  const klines=await kr.json(),ticker=await tr.json();
-  const closed=klines.slice(0,-1),open=closed.map(x=>+x[1]),high=closed.map(x=>+x[2]),low=closed.map(x=>+x[3]),close=closed.map(x=>+x[4]),vol=closed.map(x=>+x[5]),n=close.length-1;
-  if(n<220)return res.status(502).json({error:"Yeterli mum verisi alınamadı."});
+  const r=await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`);
+  if(!r.ok)return res.status(502).json({error:"Backtest için Binance mum verisi alınamadı."});
+  const k=await r.json(),open=k.map(x=>+x[1]),high=k.map(x=>+x[2]),low=k.map(x=>+x[3]),close=k.map(x=>+x[4]),vol=k.map(x=>+x[5]);
   const d=calcAll(open,high,low,close,vol);
-  const legacy=legacyAt(d,open,high,low,close,vol,n,true);
-  const advanced=advancedAt(d,open,high,low,close,vol,n);
-  const common=commonDecision(legacy,advanced);
-  const levels=smartLevels(d,high,low,close,n,common.decision);
+  const legacyTrades=[],advancedTrades=[],commonTrades=[];
+  const start=220,horizon=12; // 12 candles forward
+  for(let i=start;i<close.length-horizon-1;i++){
+    const legacy=legacyAt(d,open,high,low,close,vol,i,false);
+    const advanced=advancedAt(d,open,high,low,close,vol,i);
+    const common=commonDecision(legacy,advanced);
+    const nextOpen=open[i+1],a=d.atrV[i];
+    if(!a)continue;
+    if(legacy.signal!=="BEKLE")legacyTrades.push(evalTrade(legacy.signal,nextOpen,a,high.slice(i+1,i+1+horizon),low.slice(i+1,i+1+horizon)));
+    if(advanced.signal!=="BEKLE")advancedTrades.push(evalTrade(advanced.signal,nextOpen,a,high.slice(i+1,i+1+horizon),low.slice(i+1,i+1+horizon)));
+    const cs=sideOfDecision(common.decision);if(cs)commonTrades.push(evalTrade(cs,nextOpen,a,high.slice(i+1,i+1+horizon),low.slice(i+1,i+1+horizon)));
+  }
   res.setHeader("Cache-Control","no-store");
   return res.status(200).json({
-   symbol,interval,price:+ticker.lastPrice,change24:+ticker.priceChangePercent,
-   legacy,advanced,common,levels,timestamp:new Date().toISOString()
+   symbol,interval,candles:k.length,horizon,
+   methodology:"Sinyal kapanmış mumda hesaplandı; giriş sonraki mum açılışı; TP=1.5 ATR, SL=1.25 ATR; aynı mumda TP ve SL görülürse zarar sayıldı.",
+   legacy:summarize(legacyTrades),
+   advanced:summarize(advancedTrades),
+   common:summarize(commonTrades),
+   timestamp:new Date().toISOString()
   });
- }catch(e){return res.status(500).json({error:e?.message||"Sunucu hatası."})}
+ }catch(e){return res.status(500).json({error:e?.message||"Backtest hatası."})}
 }
