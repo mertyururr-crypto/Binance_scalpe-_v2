@@ -158,7 +158,32 @@ export default async function handler(req,res){
   const legacy=legacyAt(d,open,high,low,close,vol,n,true);
   const advanced=advancedAt(d,open,high,low,close,vol,n);
   const common=commonDecision(legacy,advanced);
-  const levels=smartLevels(d,high,low,close,n,common.decision);
+
+  // Seviye üretme mantığı:
+  // 1) Ortak karar LONG/SHORT ise ortak onaylı seviyeler.
+  // 2) Ortak karar BEKLE olsa bile gelişmiş sistem GÜÇLÜ LONG/SHORT ise aday seviyeler.
+  let levelDecision = common.decision;
+  let levelSource = "ORTAK ONAY";
+
+  if (common.decision === "BEKLE") {
+    if (advanced.score >= 80) {
+      levelDecision = "GÜÇLÜ LONG";
+      levelSource = "100 PUANLIK SİSTEM ADAYI";
+    } else if (advanced.score <= 20) {
+      levelDecision = "GÜÇLÜ SHORT";
+      levelSource = "100 PUANLIK SİSTEM ADAYI";
+    }
+  }
+
+  const levels=smartLevels(d,high,low,close,n,levelDecision);
+  levels.source = levels.entry == null ? "SEVİYE YOK" : levelSource;
+
+  if (levels.entry != null && levelSource === "100 PUANLIK SİSTEM ADAYI") {
+    levels.reason = `Gelişmiş sistem ${advanced.label} verdi • ${levels.reason} • Ortak karar henüz BEKLE`;
+  } else if (levels.entry != null) {
+    levels.reason = `Ortak onaylı seviye • ${levels.reason}`;
+  }
+
   res.setHeader("Cache-Control","no-store");
   return res.status(200).json({
    symbol,interval,price:+ticker.lastPrice,change24:+ticker.priceChangePercent,
