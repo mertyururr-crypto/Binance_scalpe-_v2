@@ -246,8 +246,135 @@ button.secondary{background:#2b333d;color:#fff}
   display:block
 }
 
+
+/* APP MENU */
+.app-topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:10px;margin-bottom:10px
+}
+.app-brand-mini{font-size:12px;font-weight:900;color:var(--muted);letter-spacing:.4px}
+.menu-open{
+  width:auto;min-width:94px;min-height:42px;
+  padding:0 13px;background:var(--panel);color:var(--text);
+  border:1px solid var(--border);border-radius:12px;font-size:13px
+}
+.menu-overlay{
+  display:none;position:fixed;inset:0;z-index:1000;
+  background:rgba(0,0,0,.62)
+}
+.menu-overlay.open{display:block}
+.menu-drawer{
+  position:absolute;top:0;right:0;width:min(88%,360px);height:100%;
+  overflow:auto;background:var(--bg);border-left:1px solid var(--border);
+  padding:calc(14px + env(safe-area-inset-top)) 12px calc(18px + env(safe-area-inset-bottom))
+}
+.menu-head{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:10px;margin-bottom:12px
+}
+.menu-title{font-size:20px;font-weight:900}
+.menu-close{
+  width:44px;min-width:44px;min-height:44px;background:var(--panel);
+  color:var(--text);border:1px solid var(--border);border-radius:12px
+}
+.menu-items{display:grid;gap:8px}
+.menu-item{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  width:100%;min-height:52px;padding:0 13px;background:var(--panel);
+  color:var(--text);border:1px solid var(--border);border-radius:13px;
+  font-size:14px;text-align:left
+}
+.menu-item span:last-child{color:var(--muted)}
+.view-overlay{
+  display:none;position:fixed;inset:0;z-index:1100;
+  overflow:auto;background:var(--bg);
+  padding:calc(12px + env(safe-area-inset-top)) 10px calc(22px + env(safe-area-inset-bottom))
+}
+.view-overlay.open{display:block}
+.view-shell{max-width:760px;margin:0 auto}
+.view-head{
+  display:flex;align-items:center;gap:10px;
+  position:sticky;top:0;z-index:2;background:var(--bg);padding:4px 0 10px
+}
+.view-back{
+  width:44px;min-width:44px;min-height:44px;background:var(--panel);
+  color:var(--text);border:1px solid var(--border);border-radius:12px
+}
+.view-title{font-size:20px;font-weight:900}
+.view-body{display:grid;gap:9px}
+.menu-card{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:15px;padding:12px
+}
+.menu-card-row{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:10px
+}
+.menu-card-title{font-size:15px;font-weight:900;overflow-wrap:anywhere}
+.menu-card-sub{font-size:11px;color:var(--muted);line-height:1.4;margin-top:4px}
+.small-btn{
+  width:auto;min-width:74px;min-height:38px;padding:0 11px;
+  background:#2b333d;color:#fff;border:1px solid var(--border);
+  border-radius:10px;font-size:12px
+}
+.danger-btn{background:#3a2020;color:#ffb2b2}
+.add-fav-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+.empty-state{
+  padding:18px;background:var(--panel);border:1px solid var(--border);
+  border-radius:15px;text-align:center;color:var(--muted);font-size:13px
+}
+.setting-row{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;
+  gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)
+}
+.setting-row:last-child{border-bottom:0}
+.setting-label{font-size:14px;font-weight:800}
+.setting-desc{font-size:11px;color:var(--muted);margin-top:3px}
+.setting-row select{width:120px;min-height:42px;font-size:14px}
+.setting-row input[type="checkbox"]{
+  width:24px;min-width:24px;height:24px;min-height:24px
+}
+.signal-badge{
+  display:inline-block;margin-top:6px;padding:5px 8px;border-radius:999px;
+  font-size:10px;font-weight:900;border:1px solid var(--border)
+}
+.signal-badge.long{color:var(--green)}
+.signal-badge.short{color:var(--red)}
+.signal-badge.wait{color:var(--orange)}
+
 </style></head>
-<body><div class="wrap">
+<body>
+<div id="menuOverlay" class="menu-overlay" aria-hidden="true">
+  <aside class="menu-drawer" aria-label="Uygulama menüsü">
+    <div class="menu-head">
+      <div class="menu-title">Menü</div>
+      <button id="menuClose" class="menu-close" type="button" aria-label="Menüyü kapat">✕</button>
+    </div>
+    <div class="menu-items">
+      <button class="menu-item" type="button" data-view="favoritesView"><span>⭐ Favoriler</span><span>›</span></button>
+      <button class="menu-item" type="button" data-view="recentView"><span>🕘 Son Analizler</span><span>›</span></button>
+      <button class="menu-item" type="button" data-view="notificationsView"><span>🔔 Bildirimler</span><span>›</span></button>
+      <button class="menu-item" type="button" data-view="settingsView"><span>⚙️ Ayarlar</span><span>›</span></button>
+      <button class="menu-item" type="button" data-view="signalsView"><span>📈 Geçmiş Sinyaller</span><span>›</span></button>
+    </div>
+  </aside>
+</div>
+
+<div id="appView" class="view-overlay" aria-hidden="true">
+  <div class="view-shell">
+    <div class="view-head">
+      <button id="viewBack" class="view-back" type="button" aria-label="Geri">‹</button>
+      <div id="viewTitle" class="view-title">Menü</div>
+    </div>
+    <div id="viewBody" class="view-body"></div>
+  </div>
+</div>
+
+<div class="wrap">
+<div class="app-topbar">
+  <div class="app-brand-mini">SCALP ANALYZER</div>
+  <button id="menuOpen" class="menu-open" type="button">☰ MENÜ</button>
+</div>
 <div class="card"><h1>Binance Futures Scalp Analyzer</h1><div class="sub">7'li sistem + 100 puan + ortak karar + backtest</div>
 <div class="controls"><div class="picker"><input id="symbol" value="1000PEPEUSDT" placeholder="Parite ara..."><div id="list" class="list"></div></div><select id="interval"><option>1m</option><option>3m</option><option selected>5m</option><option>15m</option><option>1h</option></select><button id="analyze">ANALİZ</button><button id="backtest" class="secondary">BACKTEST</button></div>
 <div id="favorites" class="favorites"></div>
@@ -324,7 +451,29 @@ button.secondary{background:#2b333d;color:#fff}
 </div>
 <script>
 const $=x=>document.getElementById(x);let symbols=[];
-const fav=["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","1000PEPEUSDT","1000SHIBUSDT","1000BONKUSDT"];
+function loadJSON(key,fallback){
+  try{const v=JSON.parse(localStorage.getItem(key));return v??fallback}catch(e){return fallback}
+}
+function saveJSON(key,value){
+  try{localStorage.setItem(key,JSON.stringify(value))}catch(e){}
+}
+function esc(s){
+  return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+}
+let appSettings=loadJSON("bsa_settings",{
+  scanSeconds:60,
+  notifyStrongLong:true,
+  notifyStrongShort:true,
+  browserNotifications:false,
+  defaultInterval:"5m",
+  autoAnalyzeOnSignal:false
+});
+let recentAnalyses=loadJSON("bsa_recent",[]);
+let signalHistory=loadJSON("bsa_signals",[]);
+let notificationLog=loadJSON("bsa_notifications",[]);
+
+const DEFAULT_FAV=["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","1000PEPEUSDT","1000SHIBUSDT","1000BONKUSDT"];
+let fav=loadJSON("bsa_favorites",DEFAULT_FAV);
 function fmt(n){if(n==null||!Number.isFinite(Number(n)))return"—";n=Number(n);return n<1?n.toLocaleString("tr-TR",{maximumFractionDigits:8}):n.toLocaleString("tr-TR",{maximumFractionDigits:5})}
 function renderFav(){$("favorites").innerHTML=fav.map(s=>`<button class="fav" data-s="${s}">${s}</button>`).join("");document.querySelectorAll(".fav").forEach(b=>b.onclick=()=>{$("symbol").value=b.dataset.s;$("list").classList.remove("open")})}
 async function loadSymbols(){try{let r=await fetch("/api/symbols"),d=await r.json();symbols=d.symbols||[]}catch(e){}}
@@ -342,6 +491,8 @@ async function analyze(){
  $("entryReason").textContent=(d.levels.source && d.levels.source!=="SEVİYE YOK" ? d.levels.source+" • " : "")+d.levels.reason;
  $("reasons").innerHTML=d.legacy.reasons.map(x=>`<div class="row"><span>${x.label}</span><span class="${x.bias>0?"pos":x.bias<0?"neg":"neu"}">${x.text}</span></div>`).join("");
  $("status").textContent=`${d.symbol} • ${d.interval} • Anlık fiyat ${fmt(d.price)} • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")}`;
+ saveAnalysisRecord(d);
+ saveSignalRecord(d);
  }catch(e){$("status").textContent="Hata: "+e.message}
 }
 function btCard(name,x){return `<div class="metric"><div class="k">${name}</div><div class="v">${x.winRate}% Win</div><div class="sub">${x.wins}W / ${x.losses}L • ${x.signals} sinyal<br>PF: ${x.profitFactor}</div></div>`}
@@ -411,6 +562,7 @@ function renderScanResults(){
       $("list").classList.remove("open");
       $("status").textContent=`${sym} seçildi. ANALİZ butonuna basabilirsin.`;
       window.scrollTo({top:0,behavior:"smooth"});
+      if(appSettings.autoAnalyzeOnSignal) analyze();
     });
   });
 }
@@ -425,7 +577,8 @@ async function runScanner(){
     if(!r.ok)throw Error(d.error||"Tarama başarısız");
     scanData={strongLong:d.strongLong||[],strongShort:d.strongShort||[]};
     renderScanResults();
-    $("scanMeta").textContent=`${d.scanned} likit parite tarandı • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")} • 60 sn'de bir yenilenir`;
+    $("scanMeta").textContent=`${d.scanned} likit parite tarandı • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")} • ${appSettings.scanSeconds} sn'de bir yenilenir`;
+    processScannerNotifications(d);
   }catch(e){
     $("scanMeta").textContent="Tarama hatası: "+e.message;
   }finally{
@@ -442,6 +595,303 @@ document.querySelectorAll(".scan-filter").forEach(btn=>{
 });
 
 $("scanNow").addEventListener("click",runScanner);
+applySettings();
 runScanner();
-scanTimer=setInterval(runScanner,60000);
+restartScannerTimer();
+
+/* ---------- Menu / Local history ---------- */
+function uniqueBySymbol(list){
+  return [...new Set(list.map(x=>String(x).toUpperCase()))].filter(Boolean);
+}
+function saveAnalysisRecord(d){
+  const rec={
+    symbol:d.symbol, interval:d.interval, price:d.price,
+    decision:d.common?.decision||"BEKLE",
+    commonConfidence:d.common?.confidence??null,
+    advancedScore:d.advanced?.score??null,
+    advancedLabel:d.advanced?.label||"",
+    longScore:d.legacy?.longScore??null,
+    shortScore:d.legacy?.shortScore??null,
+    time:d.timestamp||new Date().toISOString()
+  };
+  recentAnalyses=[rec,...recentAnalyses.filter(x=>!(x.symbol===rec.symbol&&x.interval===rec.interval&&x.time===rec.time))].slice(0,30);
+  saveJSON("bsa_recent",recentAnalyses);
+}
+function saveSignalRecord(d){
+  const common=d.common?.decision||"BEKLE";
+  const strongAdv=(d.advanced?.score>=80||d.advanced?.score<=20);
+  if(common==="BEKLE"&&!strongAdv)return;
+  const direction=common.includes("LONG")?"LONG":common.includes("SHORT")?"SHORT":d.advanced.score>=80?"LONG":"SHORT";
+  const rec={
+    symbol:d.symbol,interval:d.interval,direction,
+    decision:common,
+    advancedScore:d.advanced?.score??null,
+    price:d.price,
+    entryLow:d.levels?.entryLow??null,entryHigh:d.levels?.entryHigh??null,
+    stop:d.levels?.stop??null,tp1:d.levels?.tp1??null,tp2:d.levels?.tp2??null,
+    source:d.levels?.source||"",
+    time:d.timestamp||new Date().toISOString()
+  };
+  signalHistory=[rec,...signalHistory].slice(0,80);
+  saveJSON("bsa_signals",signalHistory);
+}
+function addNotification(rec){
+  notificationLog=[rec,...notificationLog].slice(0,80);
+  saveJSON("bsa_notifications",notificationLog);
+}
+function processScannerNotifications(d){
+  const prev=loadJSON("bsa_last_scan_signals",[]);
+  const previousKeys=new Set(prev);
+  const current=[];
+  const candidates=[
+    ...(d.strongLong||[]).map(x=>({...x,direction:"LONG"})),
+    ...(d.strongShort||[]).map(x=>({...x,direction:"SHORT"}))
+  ];
+  for(const x of candidates){
+    const key=`${x.symbol}:${x.direction}`;
+    current.push(key);
+    const enabled=x.direction==="LONG"?appSettings.notifyStrongLong:appSettings.notifyStrongShort;
+    if(enabled&&!previousKeys.has(key)){
+      const rec={
+        symbol:x.symbol,direction:x.direction,score:x.score,price:x.price,
+        reason:x.reason,time:new Date().toISOString()
+      };
+      addNotification(rec);
+      if(appSettings.browserNotifications&&"Notification" in window&&Notification.permission==="granted"){
+        try{new Notification(`${x.symbol} • GÜÇLÜ ${x.direction}`,{body:`Skor ${x.score}/100 • ${x.reason}`})}catch(e){}
+      }
+    }
+  }
+  saveJSON("bsa_last_scan_signals",current);
+}
+function restartScannerTimer(){
+  if(scanTimer)clearInterval(scanTimer);
+  const seconds=Math.max(30,Math.min(300,Number(appSettings.scanSeconds)||60));
+  scanTimer=setInterval(runScanner,seconds*1000);
+}
+function applySettings(){
+  if($("interval")&&appSettings.defaultInterval){
+    const opt=[...$("interval").options].find(o=>o.value===appSettings.defaultInterval||o.text===appSettings.defaultInterval);
+    if(opt)$("interval").value=appSettings.defaultInterval;
+  }
+}
+
+const menuOverlay=$("menuOverlay"),appView=$("appView");
+function openMenu(){
+  menuOverlay.classList.add("open");menuOverlay.setAttribute("aria-hidden","false");
+}
+function closeMenu(){
+  menuOverlay.classList.remove("open");menuOverlay.setAttribute("aria-hidden","true");
+}
+function closeView(){
+  appView.classList.remove("open");appView.setAttribute("aria-hidden","true");
+}
+$("menuOpen").addEventListener("click",openMenu);
+$("menuClose").addEventListener("click",closeMenu);
+menuOverlay.addEventListener("click",e=>{if(e.target===menuOverlay)closeMenu()});
+$("viewBack").addEventListener("click",closeView);
+
+document.querySelectorAll(".menu-item[data-view]").forEach(btn=>{
+  btn.addEventListener("click",()=>{closeMenu();openAppView(btn.dataset.view)});
+});
+
+function openAppView(view){
+  const titles={
+    favoritesView:"Favoriler",
+    recentView:"Son Analizler",
+    notificationsView:"Bildirimler",
+    settingsView:"Ayarlar",
+    signalsView:"Geçmiş Sinyaller"
+  };
+  $("viewTitle").textContent=titles[view]||"Menü";
+  renderView(view);
+  appView.classList.add("open");appView.setAttribute("aria-hidden","false");
+  appView.scrollTop=0;
+}
+function selectSymbolFromMenu(symbol,interval=null){
+  $("symbol").value=symbol;
+  if(interval)$("interval").value=interval;
+  closeView();
+  window.scrollTo({top:0,behavior:"smooth"});
+  $("status").textContent=`${symbol} seçildi.`;
+}
+function signalClass(s){
+  return String(s).includes("LONG")?"long":String(s).includes("SHORT")?"short":"wait";
+}
+function renderView(view){
+  if(view==="favoritesView")return renderFavoritesView();
+  if(view==="recentView")return renderRecentView();
+  if(view==="notificationsView")return renderNotificationsView();
+  if(view==="settingsView")return renderSettingsView();
+  if(view==="signalsView")return renderSignalsView();
+}
+function renderFavoritesView(){
+  const items=fav.length?fav.map(s=>`
+    <div class="menu-card">
+      <div class="menu-card-row">
+        <div>
+          <div class="menu-card-title">${esc(s)}</div>
+          <div class="menu-card-sub">Dokunarak analiz ekranına taşı.</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="small-btn fav-use" data-symbol="${esc(s)}" type="button">AÇ</button>
+          <button class="small-btn danger-btn fav-remove" data-symbol="${esc(s)}" type="button">SİL</button>
+        </div>
+      </div>
+    </div>`).join(""):`<div class="empty-state">Henüz favori yok.</div>`;
+  $("viewBody").innerHTML=`
+    <div class="menu-card">
+      <div class="menu-card-title">Favori parite ekle</div>
+      <div class="add-fav-row" style="margin-top:9px">
+        <input id="favInput" value="${esc($("symbol").value)}" placeholder="BTCUSDT">
+        <button id="favAdd" class="small-btn" type="button">EKLE</button>
+      </div>
+    </div>${items}`;
+  $("favAdd").onclick=()=>{
+    const s=$("favInput").value.trim().toUpperCase().replace(/[^A-Z0-9]/g,"");
+    if(!s)return;
+    fav=uniqueBySymbol([s,...fav]).slice(0,20);saveJSON("bsa_favorites",fav);renderFav();renderFavoritesView();
+  };
+  document.querySelectorAll(".fav-use").forEach(b=>b.onclick=()=>selectSymbolFromMenu(b.dataset.symbol));
+  document.querySelectorAll(".fav-remove").forEach(b=>b.onclick=()=>{
+    fav=fav.filter(x=>x!==b.dataset.symbol);saveJSON("bsa_favorites",fav);renderFav();renderFavoritesView();
+  });
+}
+function renderRecentView(){
+  $("viewBody").innerHTML=`
+    <div class="menu-card">
+      <div class="menu-card-row">
+        <div>
+          <div class="menu-card-title">Son Analizler</div>
+          <div class="menu-card-sub">Kaydedilen son analiz geçmişini temizleyebilirsin.</div>
+        </div>
+        <button id="clearRecent" class="small-btn danger-btn" type="button">GEÇMİŞİ SİL</button>
+      </div>
+    </div>
+    ${recentAnalyses.length?recentAnalyses.map(x=>`
+    <div class="menu-card">
+      <div class="menu-card-row">
+        <div>
+          <div class="menu-card-title">${esc(x.symbol)} • ${esc(x.interval)}</div>
+          <div class="menu-card-sub">${new Date(x.time).toLocaleString("tr-TR")} • Fiyat ${fmt(x.price)} • Gelişmiş ${x.advancedScore??"—"}/100</div>
+          <span class="signal-badge ${signalClass(x.decision)}">${esc(x.decision)}</span>
+        </div>
+        <button class="small-btn recent-use" data-symbol="${esc(x.symbol)}" data-interval="${esc(x.interval)}" type="button">AÇ</button>
+      </div>
+    </div>`).join(""):`<div class="empty-state">Henüz analiz geçmişi yok.</div>`}`;
+  $("clearRecent").onclick=()=>{
+    if(!confirm("Tüm son analiz geçmişi silinsin mi?")) return;
+    recentAnalyses=[];
+    saveJSON("bsa_recent",recentAnalyses);
+    renderRecentView();
+  };
+  document.querySelectorAll(".recent-use").forEach(b=>b.onclick=()=>selectSymbolFromMenu(b.dataset.symbol,b.dataset.interval));
+}
+function renderSignalsView(){
+  $("viewBody").innerHTML=`
+    <div class="menu-card">
+      <div class="menu-card-row">
+        <div>
+          <div class="menu-card-title">Geçmiş Sinyaller</div>
+          <div class="menu-card-sub">Kaydedilen LONG/SHORT sinyal geçmişini temizleyebilirsin.</div>
+        </div>
+        <button id="clearSignals" class="small-btn danger-btn" type="button">GEÇMİŞİ SİL</button>
+      </div>
+    </div>
+    ${signalHistory.length?signalHistory.map(x=>`
+    <div class="menu-card">
+      <div class="menu-card-row">
+        <div>
+          <div class="menu-card-title">${esc(x.symbol)} • ${esc(x.interval)}</div>
+          <div class="menu-card-sub">${new Date(x.time).toLocaleString("tr-TR")} • Skor ${x.advancedScore??"—"}/100 • Fiyat ${fmt(x.price)}</div>
+          <span class="signal-badge ${x.direction==="LONG"?"long":"short"}">${esc(x.direction)}</span>
+          ${x.entryLow!=null?`<div class="menu-card-sub">Giriş ${fmt(x.entryLow)} – ${fmt(x.entryHigh)} • SL ${fmt(x.stop)} • TP1 ${fmt(x.tp1)}</div>`:""}
+        </div>
+        <button class="small-btn signal-use" data-symbol="${esc(x.symbol)}" data-interval="${esc(x.interval)}" type="button">AÇ</button>
+      </div>
+    </div>`).join(""):`<div class="empty-state">Henüz kayıtlı LONG/SHORT sinyali yok.</div>`}`;
+  $("clearSignals").onclick=()=>{
+    if(!confirm("Tüm geçmiş sinyaller silinsin mi?")) return;
+    signalHistory=[];
+    saveJSON("bsa_signals",signalHistory);
+    renderSignalsView();
+  };
+  document.querySelectorAll(".signal-use").forEach(b=>b.onclick=()=>selectSymbolFromMenu(b.dataset.symbol,b.dataset.interval));
+}
+function renderNotificationsView(){
+  $("viewBody").innerHTML=`
+    <div class="menu-card">
+      <div class="menu-card-row">
+        <div>
+          <div class="menu-card-title">Tarama Bildirimleri</div>
+          <div class="menu-card-sub">Yeni güçlü LONG/SHORT adayları burada kaydedilir. Tarayıcı bildirimi destekleniyorsa Ayarlar'dan açabilirsin.</div>
+        </div>
+        <button id="clearNotifs" class="small-btn danger-btn" type="button">TEMİZLE</button>
+      </div>
+    </div>
+    ${notificationLog.length?notificationLog.map(x=>`
+      <div class="menu-card">
+        <div class="menu-card-title">${esc(x.symbol)} • GÜÇLÜ ${esc(x.direction)}</div>
+        <div class="menu-card-sub">${new Date(x.time).toLocaleString("tr-TR")} • ${x.score}/100 • ${esc(x.reason||"")}</div>
+        <span class="signal-badge ${x.direction==="LONG"?"long":"short"}">${esc(x.direction)}</span>
+      </div>`).join(""):`<div class="empty-state">Yeni bildirim yok.</div>`}`;
+  $("clearNotifs").onclick=()=>{notificationLog=[];saveJSON("bsa_notifications",notificationLog);renderNotificationsView()};
+}
+function renderSettingsView(){
+  $("viewBody").innerHTML=`
+    <div class="menu-card">
+      <div class="setting-row">
+        <div><div class="setting-label">Tarama sıklığı</div><div class="setting-desc">Canlı güçlü sinyaller ne kadar sık yenilensin?</div></div>
+        <select id="setScan">
+          <option value="30">30 sn</option><option value="60">60 sn</option>
+          <option value="120">2 dk</option><option value="300">5 dk</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <div><div class="setting-label">Varsayılan zaman dilimi</div><div class="setting-desc">Uygulama açıldığında seçili gelir.</div></div>
+        <select id="setInterval"><option>1m</option><option>3m</option><option>5m</option><option>15m</option><option>1h</option></select>
+      </div>
+      <div class="setting-row">
+        <div><div class="setting-label">Güçlü LONG bildirimi</div><div class="setting-desc">80+ skor yeni sinyallerini kaydet.</div></div>
+        <input id="setLongNotif" type="checkbox">
+      </div>
+      <div class="setting-row">
+        <div><div class="setting-label">Güçlü SHORT bildirimi</div><div class="setting-desc">20 ve altı yeni sinyallerini kaydet.</div></div>
+        <input id="setShortNotif" type="checkbox">
+      </div>
+      <div class="setting-row">
+        <div><div class="setting-label">Sinyale dokununca otomatik analiz</div><div class="setting-desc">Canlı sinyal kartına dokununca ANALİZ'i otomatik çalıştır.</div></div>
+        <input id="setAutoAnalyze" type="checkbox">
+      </div>
+      <div class="setting-row">
+        <div><div class="setting-label">Tarayıcı bildirimi</div><div class="setting-desc">Desteklenen cihazlarda yeni güçlü sinyal için sistem bildirimi.</div></div>
+        <button id="browserNotifBtn" class="small-btn" type="button">İZİN VER</button>
+      </div>
+    </div>`;
+  $("setScan").value=String(appSettings.scanSeconds);
+  $("setInterval").value=appSettings.defaultInterval;
+  $("setLongNotif").checked=!!appSettings.notifyStrongLong;
+  $("setShortNotif").checked=!!appSettings.notifyStrongShort;
+  $("setAutoAnalyze").checked=!!appSettings.autoAnalyzeOnSignal;
+  const saveSettings=()=>{
+    appSettings.scanSeconds=Number($("setScan").value);
+    appSettings.defaultInterval=$("setInterval").value;
+    appSettings.notifyStrongLong=$("setLongNotif").checked;
+    appSettings.notifyStrongShort=$("setShortNotif").checked;
+    appSettings.autoAnalyzeOnSignal=$("setAutoAnalyze").checked;
+    saveJSON("bsa_settings",appSettings);restartScannerTimer();
+  };
+  ["setScan","setInterval","setLongNotif","setShortNotif","setAutoAnalyze"].forEach(id=>$(id).addEventListener("change",saveSettings));
+  $("browserNotifBtn").onclick=async()=>{
+    if(!("Notification" in window)){alert("Bu cihaz/tarayıcı web bildirimini desteklemiyor.");return}
+    try{
+      const permission=await Notification.requestPermission();
+      appSettings.browserNotifications=permission==="granted";
+      saveJSON("bsa_settings",appSettings);
+      $("browserNotifBtn").textContent=permission==="granted"?"AÇIK":"İZİN YOK";
+    }catch(e){alert("Bildirim izni alınamadı.")}
+  };
+  if("Notification" in window&&Notification.permission==="granted")$("browserNotifBtn").textContent="AÇIK";
+}
+
 </script></body></html>
