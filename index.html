@@ -414,6 +414,19 @@ button.secondary{background:#2b333d;color:#fff}
   .risk-calc-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
 
+
+/* V6 market context + paper trading */
+.market-context{margin-top:9px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.context-card{padding:9px;background:var(--p2);border:1px solid var(--border);border-radius:11px}
+.context-card .v{font-size:13px;font-weight:900;margin-top:3px}
+.paper-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.paper-big{font-size:20px;font-weight:900}
+.paper-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.paper-actions .small-btn{flex:1;min-width:130px}
+.paper-ok{color:var(--green)}.paper-stop{color:var(--red)}.paper-warn{color:var(--orange)}
+.market-confirm{margin-top:8px;padding:9px 10px;border:1px solid var(--border);border-radius:11px;font-size:11px;line-height:1.45}
+@media(min-width:600px){.market-context{grid-template-columns:repeat(4,minmax(0,1fr))}.paper-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+
 </style></head>
 <body>
 <div id="menuOverlay" class="menu-overlay" aria-hidden="true">
@@ -430,6 +443,7 @@ button.secondary{background:#2b333d;color:#fff}
       <button class="menu-item" type="button" data-view="chartsView"><span>📊 Grafikler</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="performanceView"><span>📊 Performans</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="riskView"><span>🧮 Risk Hesaplayıcı</span><span>›</span></button>
+      <button class="menu-item" type="button" data-view="paperView"><span>🧪 Paper Trading</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="signalsView"><span>📈 Geçmiş Sinyaller</span><span>›</span></button>
     </div>
   </aside>
@@ -482,6 +496,13 @@ button.secondary{background:#2b333d;color:#fff}
 <div id="conflictBox" class="conflict-box"></div>
 <div class="regime-box"><div class="regime-title">PİYASA REJİMİ</div><div id="marketRegime" class="regime-value">—</div><div id="marketRegimeNote" class="sub">Analiz sonrası belirlenir.</div></div>
 <div id="guardBox" class="guard-box"></div>
+<div id="marketConfirm" class="market-confirm">Çoklu zaman dilimi / Funding / OI teyidi analiz sonrası yüklenir.</div>
+<div class="market-context">
+  <div class="context-card"><div class="k">15m TREND</div><div id="ctx15" class="v">—</div></div>
+  <div class="context-card"><div class="k">1h TREND</div><div id="ctx1h" class="v">—</div></div>
+  <div class="context-card"><div class="k">FUNDING</div><div id="ctxFunding" class="v">—</div></div>
+  <div class="context-card"><div class="k">OPEN INTEREST</div><div id="ctxOI" class="v">—</div></div>
+</div>
 </div>
 
 <div class="card collapsible-card">
@@ -560,7 +581,13 @@ let appSettings=loadJSON("bsa_settings",{
   btcFilter:true,
   shockGuard:true,
   whitelist:[],
-  blacklist:[]
+  blacklist:[],
+  paperStartBalance:10000,
+  paperRiskPct:1,
+  dailyLossLimitR:3,
+  consecutiveLossLimit:3,
+  lossPauseMinutes:60,
+  autoPaper:false
 });
 appSettings.whitelist=Array.isArray(appSettings.whitelist)?appSettings.whitelist:[];
 appSettings.blacklist=Array.isArray(appSettings.blacklist)?appSettings.blacklist:[];
@@ -568,6 +595,8 @@ let latestAnalysis=null;
 let recentAnalyses=loadJSON("bsa_recent",[]);
 let signalHistory=loadJSON("bsa_signals",[]);
 let notificationLog=loadJSON("bsa_notifications",[]);
+let paperTrades=loadJSON("bsa_paper_trades",[]);
+let marketContext=null;
 
 const DEFAULT_FAV=["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","1000PEPEUSDT","1000SHIBUSDT","1000BONKUSDT"];
 let fav=loadJSON("bsa_favorites",DEFAULT_FAV);
@@ -648,6 +677,35 @@ function updateDecisionExtras(d){
   }
 }
 
+
+function ctxTrendClass(v){return v==="LONG"?"pos":v==="SHORT"?"neg":"neu"}
+async function loadMarketContext(symbol,baseDirection){
+  try{
+    $("marketConfirm").textContent="Piyasa teyitleri yükleniyor...";
+    const r=await fetch(`/api/market-context?symbol=${encodeURIComponent(symbol)}&t=${Date.now()}`,{cache:"no-store"});
+    const d=await r.json();if(!r.ok)throw Error(d.error||"Piyasa teyidi alınamadı");
+    marketContext=d;
+    $("ctx15").textContent=`${d.mtf.m15.direction} ${d.mtf.m15.score}/100`;
+    $("ctx15").className="v "+ctxTrendClass(d.mtf.m15.direction);
+    $("ctx1h").textContent=`${d.mtf.h1.direction} ${d.mtf.h1.score}/100`;
+    $("ctx1h").className="v "+ctxTrendClass(d.mtf.h1.direction);
+    $("ctxFunding").textContent=`${d.funding.ratePct>=0?"+":""}${d.funding.ratePct.toFixed(4)}%`;
+    $("ctxOI").textContent=`${d.openInterest.changePct>=0?"+":""}${d.openInterest.changePct.toFixed(2)}%`;
+    const dir=baseDirection&&baseDirection.includes("LONG")?"LONG":baseDirection&&baseDirection.includes("SHORT")?"SHORT":null;
+    let confirmations=0,total=0,notes=[];
+    for(const tf of [d.mtf.m15,d.mtf.h1]){if(dir){total++;if(tf.direction===dir)confirmations++;else if(tf.direction!=="NEUTRAL")notes.push(`${tf.interval} ters`)}}
+    if(dir){total++;const marketOk=(d.market.btc.direction===dir||d.market.btc.direction==="NEUTRAL")&&(d.market.eth.direction===dir||d.market.eth.direction==="NEUTRAL");if(marketOk)confirmations++;else notes.push("BTC/ETH ters")}
+    if(dir){total++;const oiOk=d.openInterest.changePct>=0;if(oiOk)confirmations++;else notes.push("OI düşüyor")}
+    if(dir){total++;const f=Math.abs(d.funding.ratePct);if(f<0.08)confirmations++;else notes.push("Funding aşırı")}
+    $("marketConfirm").textContent=`Piyasa teyidi ${confirmations}/${total}${notes.length?" • "+notes.join(" • "):" • uyumlu"}`;
+    return d;
+  }catch(e){
+    $("marketConfirm").textContent="Piyasa teyidi hatası: "+e.message;
+    $("ctx15").textContent=$("ctx1h").textContent=$("ctxFunding").textContent=$("ctxOI").textContent="—";
+    return null;
+  }
+}
+
 async function analyze(){
  let symbol=$("symbol").value,interval=$("interval").value;$("status").textContent="Analiz ediliyor...";
  try{let r=await fetch(`/api/analyze?symbol=${symbol}&interval=${interval}`),d=await r.json();if(!r.ok)throw Error(d.error);
@@ -658,11 +716,13 @@ async function analyze(){
  if(d.levels.entry!=null){$("entryZone").textContent=`${fmt(d.levels.entryLow)} – ${fmt(d.levels.entryHigh)}`;$("stop").textContent=fmt(d.levels.stop);$("tp1").textContent=fmt(d.levels.tp1);$("tp2").textContent=fmt(d.levels.tp2)}else{$("entryZone").textContent=$("stop").textContent=$("tp1").textContent=$("tp2").textContent="—"}
  $("entryReason").textContent=(d.levels.source && d.levels.source!=="SEVİYE YOK" ? d.levels.source+" • " : "")+d.levels.reason;
  updateDecisionExtras(d);
+ await loadMarketContext(d.symbol,d.common?.decision!=="BEKLE"?d.common?.decision:d.advanced?.signal);
  $("reasons").innerHTML=d.legacy.reasons.map(x=>`<div class="row"><span>${x.label}</span><span class="${x.bias>0?"pos":x.bias<0?"neg":"neu"}">${x.text}</span></div>`).join("");
  $("status").textContent=`${d.symbol} • ${d.interval} • Anlık fiyat ${fmt(d.price)} • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")}`;
  latestAnalysis=d;
  saveAnalysisRecord(d);
  saveSignalRecord(d);
+ if(appSettings.autoPaper) maybeOpenPaperFromAnalysis(d);
  }catch(e){$("status").textContent="Hata: "+e.message}
 }
 function btCard(name,x){return `<div class="metric"><div class="k">${name}</div><div class="v">${x.winRate}% Win</div><div class="sub">${x.wins}W / ${x.losses}L • ${x.signals} sinyal<br>PF: ${x.profitFactor}</div></div>`}
@@ -908,6 +968,7 @@ function openAppView(view){
     chartsView:"Grafikler",
     performanceView:"Performans",
     riskView:"Risk Hesaplayıcı",
+    paperView:"Paper Trading",
     signalsView:"Geçmiş Sinyaller"
   };
   $("viewTitle").textContent=titles[view]||"Menü";
@@ -933,6 +994,7 @@ function renderView(view){
   if(view==="chartsView")return renderChartsView();
   if(view==="performanceView")return renderPerformanceView();
   if(view==="riskView")return renderRiskView();
+  if(view==="paperView")return renderPaperView();
   if(view==="signalsView")return renderSignalsView();
 }
 async function renderFavoritesView(){
@@ -1088,6 +1150,76 @@ function renderNotificationsView(){
   $("clearNotifs").onclick=()=>{notificationLog=[];saveJSON("bsa_notifications",notificationLog);renderNotificationsView()};
 }
 
+
+
+function todayKey(ts=Date.now()){const d=new Date(ts);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
+function paperResultR(x){
+  if(!["TP1","TP2","SL"].includes(x.outcome))return null;
+  const e=Number(x.entry),s=Number(x.stop),risk=Math.abs(e-s);if(!risk)return null;
+  let gross=x.outcome==="SL"?-1:x.outcome==="TP2"?Math.abs(Number(x.tp2)-e)/risk:Math.abs(Number(x.tp1)-e)/risk;
+  const costPct=(Number(appSettings.feePctRoundTrip)||0)+(Number(appSettings.slippagePctRoundTrip)||0);
+  return gross-(e*(costPct/100))/risk;
+}
+function paperProtection(){
+  const closed=paperTrades.filter(x=>["TP1","TP2","SL"].includes(x.outcome));
+  const todays=closed.filter(x=>todayKey(new Date(x.outcomeTime||x.time).getTime())===todayKey());
+  const dayR=todays.reduce((s,x)=>s+(paperResultR(x)||0),0);
+  let streak=0,lastLossTime=null;
+  for(const x of closed.sort((a,b)=>new Date(b.outcomeTime||b.time)-new Date(a.outcomeTime||a.time))){
+    if(x.outcome==="SL"){streak++;if(!lastLossTime)lastLossTime=new Date(x.outcomeTime||x.time).getTime()}else break;
+  }
+  const dailyBlocked=dayR<=-Math.abs(Number(appSettings.dailyLossLimitR)||3);
+  const streakBlocked=streak>=Math.max(1,Number(appSettings.consecutiveLossLimit)||3)&&lastLossTime&&(Date.now()-lastLossTime)<(Number(appSettings.lossPauseMinutes)||60)*60000;
+  return {dayR,streak,dailyBlocked,streakBlocked,blocked:dailyBlocked||streakBlocked};
+}
+function maybeOpenPaperFromAnalysis(d){
+  if(!d?.levels||d.levels.entry==null)return false;
+  const direction=d.common?.decision?.includes("LONG")?"LONG":d.common?.decision?.includes("SHORT")?"SHORT":d.advanced?.score>=80?"LONG":d.advanced?.score<=20?"SHORT":null;
+  if(!direction)return false;
+  const p=paperProtection();if(p.blocked)return false;
+  const dup=paperTrades.some(x=>x.symbol===d.symbol&&x.direction===direction&&["AÇIK","GİRİŞ BEKLİYOR"].includes(x.outcome));if(dup)return false;
+  const entry=Number(d.levels.entry),stop=Number(d.levels.stop);if(!Number.isFinite(entry)||!Number.isFinite(stop)||entry===stop)return false;
+  const bal=paperEquity();const riskUsd=bal*(Math.max(.1,Number(appSettings.paperRiskPct)||1)/100);const riskPct=Math.abs(entry-stop)/entry;const notional=riskUsd/riskPct;
+  paperTrades=[{id:`${Date.now()}-${d.symbol}`,symbol:d.symbol,interval:d.interval,direction,entry,entryLow:d.levels.entryLow,entryHigh:d.levels.entryHigh,stop,tp1:d.levels.tp1,tp2:d.levels.tp2,notional,riskUsd,outcome:"GİRİŞ BEKLİYOR",time:new Date().toISOString()},...paperTrades].slice(0,200);
+  saveJSON("bsa_paper_trades",paperTrades);return true;
+}
+function paperEquity(){
+  const start=Number(appSettings.paperStartBalance)||10000;
+  return paperTrades.reduce((bal,x)=>{const r=paperResultR(x);return r==null?bal:bal+(Number(x.riskUsd)||0)*r},start);
+}
+async function refreshPaperTrades(){
+  const open=paperTrades.filter(x=>["AÇIK","GİRİŞ BEKLİYOR"].includes(x.outcome)).slice(0,30);
+  for(const x of open){
+    try{
+      const u=`/api/signal-status?symbol=${encodeURIComponent(x.symbol)}&interval=${encodeURIComponent(x.interval)}&time=${encodeURIComponent(x.time)}&direction=${x.direction}&entryLow=${x.entryLow}&entryHigh=${x.entryHigh}&stop=${x.stop}&tp1=${x.tp1}&tp2=${x.tp2??""}`;
+      const r=await fetch(u,{cache:"no-store"}),d=await r.json();if(r.ok){x.outcome=d.outcome;x.outcomeTime=d.outcomeTime||null;x.entryTime=d.entryTime||null}
+    }catch(e){}
+  }
+  saveJSON("bsa_paper_trades",paperTrades);
+}
+async function renderPaperView(){
+  $("viewBody").innerHTML=`<div class="empty-state">Paper işlemler güncelleniyor...</div>`;
+  await refreshPaperTrades();
+  const p=paperProtection(),equity=paperEquity();
+  const closed=paperTrades.filter(x=>["TP1","TP2","SL"].includes(x.outcome)),wins=closed.filter(x=>x.outcome!=="SL");
+  const status=p.dailyBlocked?`GÜNLÜK LİMİT: ${p.dayR.toFixed(2)}R`:p.streakBlocked?`${p.streak} ARDIŞIK SL • BEKLEME AKTİF`:"İŞLEM AÇILABİLİR";
+  $("viewBody").innerHTML=`
+    <div class="paper-grid">
+      <div class="menu-card"><div class="menu-card-sub">Sanal bakiye</div><div class="paper-big">${equity.toFixed(2)} USDT</div></div>
+      <div class="menu-card"><div class="menu-card-sub">Bugün</div><div class="paper-big ${p.dayR<0?"paper-stop":"paper-ok"}">${p.dayR.toFixed(2)}R</div></div>
+      <div class="menu-card"><div class="menu-card-sub">Win rate</div><div class="paper-big">${closed.length?Math.round(wins.length/closed.length*100):0}%</div></div>
+      <div class="menu-card"><div class="menu-card-sub">Koruma</div><div class="paper-big ${p.blocked?"paper-stop":"paper-ok"}" style="font-size:13px">${status}</div></div>
+    </div>
+    <div class="menu-card">
+      <div class="menu-card-title">Paper Trading</div>
+      <div class="menu-card-sub">Gerçek emir göndermez. Son analizdeki giriş / SL / TP seviyeleriyle sanal işlem oluşturur.</div>
+      <div class="paper-actions"><button id="paperOpenLatest" class="small-btn" type="button">SON ANALİZİ SANAL AÇ</button><button id="paperRefresh" class="small-btn" type="button">SONUÇLARI GÜNCELLE</button><button id="paperReset" class="small-btn danger-btn" type="button">PAPER'I SIFIRLA</button></div>
+    </div>
+    ${paperTrades.length?paperTrades.map(x=>`<div class="menu-card"><div class="menu-card-title">${esc(x.symbol)} • ${esc(x.direction)}</div><div class="menu-card-sub">${new Date(x.time).toLocaleString("tr-TR")} • ${x.notional?x.notional.toFixed(2):"—"} USDT pozisyon • risk ${x.riskUsd?x.riskUsd.toFixed(2):"—"} USDT</div><span class="outcome ${outcomeClass(x.outcome)}">${esc(x.outcome)}</span><div class="net-metric">${paperResultR(x)!=null?`Net ${paperResultR(x).toFixed(2)}R`:"Henüz sonuçlanmadı"}</div></div>`).join(""):`<div class="empty-state">Henüz sanal işlem yok.</div>`}`;
+  $("paperOpenLatest").onclick=()=>{if(!latestAnalysis){alert("Önce ana ekranda bir analiz yap.");return}const p2=paperProtection();if(p2.blocked){alert("Risk koruması aktif. Yeni paper işlem açılmadı.");return}if(!maybeOpenPaperFromAnalysis(latestAnalysis)){alert("Bu analizden sanal işlem açılamadı veya aynı yönde açık işlem zaten var.");return}renderPaperView()};
+  $("paperRefresh").onclick=renderPaperView;
+  $("paperReset").onclick=()=>{if(confirm("Tüm Paper Trading geçmişi silinsin mi?")){paperTrades=[];saveJSON("bsa_paper_trades",paperTrades);renderPaperView()}};
+}
 
 function signalR(x){
   if(!["TP1","TP2","SL"].includes(x.outcome))return null;
@@ -1468,6 +1600,30 @@ function renderSettingsView(){
         <div id="blackTags" class="tag-list"></div>
       </div>
       <div class="setting-row">
+        <div><div class="setting-label">Paper başlangıç bakiyesi</div><div class="setting-desc">Sanal hesabın başlangıç USDT bakiyesi.</div></div>
+        <input id="setPaperBalance" type="number" min="100" step="100" style="width:100px">
+      </div>
+      <div class="setting-row">
+        <div><div class="setting-label">Paper işlem riski %</div><div class="setting-desc">Her sanal işlemde güncel sanal bakiyenin risk yüzdesi.</div></div>
+        <input id="setPaperRisk" type="number" min="0.1" max="5" step="0.1" style="width:90px">
+      </div>
+      <div class="setting-row">
+        <div><div class="setting-label">Günlük zarar limiti</div><div class="setting-desc">Bu R seviyesine ulaşınca yeni paper işlem durur.</div></div>
+        <select id="setDailyLoss"><option value="2">-2R</option><option value="3">-3R</option><option value="4">-4R</option><option value="5">-5R</option></select>
+      </div>
+      <div class="setting-row">
+        <div><div class="setting-label">Ardışık SL koruması</div><div class="setting-desc">Belirlenen SL sayısından sonra sanal işlem açmayı geçici durdurur.</div></div>
+        <select id="setLossStreak"><option value="2">2 SL</option><option value="3">3 SL</option><option value="4">4 SL</option></select>
+      </div>
+      <div class="setting-row">
+        <div><div class="setting-label">SL sonrası bekleme</div><div class="setting-desc">Ardışık kayıp korumasının bekleme süresi.</div></div>
+        <select id="setLossPause"><option value="30">30 dk</option><option value="60">60 dk</option><option value="120">2 saat</option></select>
+      </div>
+      <div class="setting-row">
+        <div><div class="setting-label">Otomatik Paper Trading</div><div class="setting-desc">Analiz güçlü bir işlem seviyesi oluşturursa sanal işlem açmayı dener.</div></div>
+        <input id="setAutoPaper" type="checkbox">
+      </div>
+      <div class="setting-row">
         <div><div class="setting-label">Sinyale dokununca otomatik analiz</div><div class="setting-desc">Canlı sinyal kartına dokununca ANALİZ'i otomatik çalıştır.</div></div>
         <input id="setAutoAnalyze" type="checkbox">
       </div>
@@ -1486,6 +1642,12 @@ function renderSettingsView(){
   $("setCooldown").value=String(appSettings.cooldownMinutes??20);
   $("setBtcFilter").checked=!!appSettings.btcFilter;
   $("setShockGuard").checked=!!appSettings.shockGuard;
+  $("setPaperBalance").value=Number(appSettings.paperStartBalance)||10000;
+  $("setPaperRisk").value=Number(appSettings.paperRiskPct)||1;
+  $("setDailyLoss").value=String(appSettings.dailyLossLimitR||3);
+  $("setLossStreak").value=String(appSettings.consecutiveLossLimit||3);
+  $("setLossPause").value=String(appSettings.lossPauseMinutes||60);
+  $("setAutoPaper").checked=!!appSettings.autoPaper;
   function renderPolicyTags(){
     $("whiteTags").innerHTML=(appSettings.whitelist||[]).map(s=>`<span class="tag">${esc(s)} <button type="button" class="tag-del-white" data-s="${esc(s)}">×</button></span>`).join("");
     $("blackTags").innerHTML=(appSettings.blacklist||[]).map(s=>`<span class="tag">${esc(s)} <button type="button" class="tag-del-black" data-s="${esc(s)}">×</button></span>`).join("");
@@ -1511,9 +1673,15 @@ function renderSettingsView(){
     appSettings.cooldownMinutes=Number($("setCooldown").value)||0;
     appSettings.btcFilter=$("setBtcFilter").checked;
     appSettings.shockGuard=$("setShockGuard").checked;
+    appSettings.paperStartBalance=Math.max(100,Number($("setPaperBalance").value)||10000);
+    appSettings.paperRiskPct=Math.max(.1,Math.min(5,Number($("setPaperRisk").value)||1));
+    appSettings.dailyLossLimitR=Number($("setDailyLoss").value)||3;
+    appSettings.consecutiveLossLimit=Number($("setLossStreak").value)||3;
+    appSettings.lossPauseMinutes=Number($("setLossPause").value)||60;
+    appSettings.autoPaper=$("setAutoPaper").checked;
     saveJSON("bsa_settings",appSettings);restartScannerTimer();renderScanResults();
   };
-  ["setScan","setInterval","setLongNotif","setShortNotif","setAutoAnalyze","setFee","setSlip","setCooldown","setBtcFilter","setShockGuard"].forEach(id=>$(id).addEventListener("change",saveSettings));
+  ["setScan","setInterval","setLongNotif","setShortNotif","setAutoAnalyze","setFee","setSlip","setCooldown","setBtcFilter","setShockGuard","setPaperBalance","setPaperRisk","setDailyLoss","setLossStreak","setLossPause","setAutoPaper"].forEach(id=>$(id).addEventListener("change",saveSettings));
   $("browserNotifBtn").onclick=async()=>{
     if(!("Notification" in window)){alert("Bu cihaz/tarayıcı web bildirimini desteklemiyor.");return}
     try{
