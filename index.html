@@ -157,7 +157,7 @@ button.secondary{background:#2b333d;color:#fff}
 
 <div class="card"><div class="k">100 PUANLIK GELİŞMİŞ SİSTEM</div><div class="grid"><div class="metric"><div class="k">Skor</div><div id="advScore" class="v">—</div></div><div class="metric" style="grid-column:span 3"><div class="k">Değerlendirme</div><div id="advLabel" class="v">—</div></div></div><div id="breakdown" class="grid" style="margin-top:10px"></div></div>
 
-<div class="card"><div class="k">İŞLEM SEVİYELERİ — MANTIKLI GİRİŞ</div><div class="grid" style="margin-top:10px"><div class="metric"><div class="k">Giriş Bölgesi</div><div id="entryZone" class="v zone">—</div></div><div class="metric"><div class="k">Stop</div><div id="stop" class="v">—</div></div><div class="metric"><div class="k">TP1</div><div id="tp1" class="v">—</div></div><div class="metric"><div class="k">TP2</div><div id="tp2" class="v">—</div></div></div><div id="entryReason" class="sub" style="margin-top:9px">Ortak işlem onayı bekleniyor.</div></div>
+<div class="card"><div class="k">İŞLEM SEVİYELERİ — ONAYLI / ADAY GİRİŞ</div><div class="grid" style="margin-top:10px"><div class="metric"><div class="k">Giriş Bölgesi</div><div id="entryZone" class="v zone">—</div></div><div class="metric"><div class="k">Stop</div><div id="stop" class="v">—</div></div><div class="metric"><div class="k">TP1</div><div id="tp1" class="v">—</div></div><div class="metric"><div class="k">TP2</div><div id="tp2" class="v">—</div></div></div><div id="entryReason" class="sub" style="margin-top:9px">Ortak işlem onayı bekleniyor.</div></div>
 
 <div class="card"><div class="k">TEKNİK DURUM</div><div id="reasons"></div></div>
 
@@ -180,7 +180,7 @@ async function analyze(){
  $("advScore").textContent=d.advanced.score+"/100";$("advLabel").textContent=d.advanced.label;
  $("breakdown").innerHTML=d.advanced.breakdown.map(x=>`<div class="metric"><div class="k">${x.label}</div><div class="v">${x.score}/${x.max}</div><div class="sub">${x.text}</div></div>`).join("");
  if(d.levels.entry!=null){$("entryZone").textContent=`${fmt(d.levels.entryLow)} – ${fmt(d.levels.entryHigh)}`;$("stop").textContent=fmt(d.levels.stop);$("tp1").textContent=fmt(d.levels.tp1);$("tp2").textContent=fmt(d.levels.tp2)}else{$("entryZone").textContent=$("stop").textContent=$("tp1").textContent=$("tp2").textContent="—"}
- $("entryReason").textContent=d.levels.reason;
+ $("entryReason").textContent=(d.levels.source && d.levels.source!=="SEVİYE YOK" ? d.levels.source+" • " : "")+d.levels.reason;
  $("reasons").innerHTML=d.legacy.reasons.map(x=>`<div class="row"><span>${x.label}</span><span class="${x.bias>0?"pos":x.bias<0?"neg":"neu"}">${x.text}</span></div>`).join("");
  $("status").textContent=`${d.symbol} • ${d.interval} • Anlık fiyat ${fmt(d.price)} • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")}`;
  }catch(e){$("status").textContent="Hata: "+e.message}
