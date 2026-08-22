@@ -372,6 +372,29 @@ button.secondary{background:#2b333d;color:#fff}
   .chart-levels{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
 
+
+/* V4 decision-quality additions */
+.quality-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+.quality-pill{padding:6px 8px;border:1px solid var(--border);border-radius:999px;font-size:10px;font-weight:900}
+.quality-good{color:var(--green)} .quality-warn{color:var(--orange)} .quality-bad{color:var(--red)}
+.regime-box{margin-top:9px;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--p2)}
+.regime-title{font-size:10px;color:var(--muted);font-weight:900;letter-spacing:.4px}
+.regime-value{font-size:14px;font-weight:900;margin-top:3px}
+.conflict-box{display:none;margin-top:8px;padding:9px 10px;border:1px solid var(--border);border-radius:11px;font-size:11px;line-height:1.4}
+.conflict-box.show{display:block}
+.rr-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:9px}
+.mini-spark{width:110px;height:36px;display:block}
+.fav-overview{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.outcome{font-size:10px;font-weight:900;padding:5px 8px;border-radius:999px;border:1px solid var(--border);display:inline-block;margin-top:6px}
+.outcome.tp{color:var(--green)} .outcome.sl{color:var(--red)} .outcome.open{color:var(--orange)} .outcome.wait{color:var(--muted)}
+.performance-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.performance-big{font-size:22px;font-weight:900}
+.scan-filter[data-filter="QUALITY"]{border-style:dashed}
+@media(min-width:600px){
+  .rr-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .performance-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+
 </style></head>
 <body>
 <div id="menuOverlay" class="menu-overlay" aria-hidden="true">
@@ -386,6 +409,7 @@ button.secondary{background:#2b333d;color:#fff}
       <button class="menu-item" type="button" data-view="notificationsView"><span>🔔 Bildirimler</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="settingsView"><span>⚙️ Ayarlar</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="chartsView"><span>📊 Grafikler</span><span>›</span></button>
+      <button class="menu-item" type="button" data-view="performanceView"><span>📊 Performans</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="signalsView"><span>📈 Geçmiş Sinyaller</span><span>›</span></button>
     </div>
   </aside>
@@ -425,6 +449,7 @@ button.secondary{background:#2b333d;color:#fff}
       <button type="button" class="scan-filter active" data-filter="ALL">HEPSİ</button>
       <button type="button" class="scan-filter" data-filter="LONG">LONG</button>
       <button type="button" class="scan-filter" data-filter="SHORT">SHORT</button>
+      <button type="button" class="scan-filter" data-filter="QUALITY">KALİTELİ</button>
     </div>
     <div id="scanResults" class="scan-results">
       <div class="sub">Güçlü LONG / SHORT adayları burada görünecek.</div>
@@ -433,7 +458,10 @@ button.secondary{background:#2b333d;color:#fff}
 </div>
 <div id="status" class="status" style="margin-top:9px">Hazır.</div></div>
 
-<div class="card"><div class="k">ORTAK KARAR</div><div class="signal"><div><div id="decision" class="word wait">BEKLE</div><div id="note" class="sub">Henüz analiz yapılmadı.</div></div><div><div id="commonConf" class="conf">—</div><div class="sub">ortak güven</div></div></div></div>
+<div class="card"><div class="k">ORTAK KARAR</div><div class="signal"><div><div id="decision" class="word wait">BEKLE</div><div id="note" class="sub">Henüz analiz yapılmadı.</div></div><div><div id="commonConf" class="conf">—</div><div class="sub">ortak güven</div></div></div>
+<div id="conflictBox" class="conflict-box"></div>
+<div class="regime-box"><div class="regime-title">PİYASA REJİMİ</div><div id="marketRegime" class="regime-value">—</div><div id="marketRegimeNote" class="sub">Analiz sonrası belirlenir.</div></div>
+</div>
 
 <div class="card collapsible-card">
 <button class="collapse-toggle" type="button" aria-expanded="false" data-target="mevcut-7-li-si-stem">
@@ -459,6 +487,12 @@ button.secondary{background:#2b333d;color:#fff}
 </button>
 <div id="i-lem-sevi-yeleri" class="collapse-content">
 <div class="k">İŞLEM SEVİYELERİ — ONAYLI / ADAY GİRİŞ</div><div class="grid" style="margin-top:10px"><div class="metric"><div class="k">Giriş Bölgesi</div><div id="entryZone" class="v zone">—</div></div><div class="metric"><div class="k">Stop</div><div id="stop" class="v">—</div></div><div class="metric"><div class="k">TP1</div><div id="tp1" class="v">—</div></div><div class="metric"><div class="k">TP2</div><div id="tp2" class="v">—</div></div></div><div id="entryReason" class="sub" style="margin-top:9px">Ortak işlem onayı bekleniyor.</div>
+<div class="rr-grid">
+  <div class="metric"><div class="k">TP1 R/R</div><div id="rr1" class="v">—</div></div>
+  <div class="metric"><div class="k">TP2 R/R</div><div id="rr2" class="v">—</div></div>
+  <div class="metric"><div class="k">Risk %</div><div id="riskPct" class="v">—</div></div>
+  <div class="metric"><div class="k">Kalite</div><div id="tradeQuality" class="v">—</div></div>
+</div>
 </div>
 </div>
 
@@ -512,6 +546,59 @@ async function loadSymbols(){try{let r=await fetch("/api/symbols"),d=await r.jso
 function showList(){let q=$("symbol").value.toUpperCase(),m=symbols.filter(x=>x.symbol.includes(q)||x.baseAsset.includes(q)).slice(0,100);$("list").innerHTML=m.map(x=>`<div class="item" data-s="${x.symbol}">${x.symbol}</div>`).join("");$("list").classList.add("open");document.querySelectorAll(".item").forEach(x=>x.onclick=()=>{$("symbol").value=x.dataset.s;$("list").classList.remove("open")})}
 $("symbol").oninput=e=>{e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"");showList()};$("symbol").onfocus=showList;document.addEventListener("click",e=>{if(!e.target.closest(".picker"))$("list").classList.remove("open")});
 function setDecision(s){$("decision").textContent=s;$("decision").className="word "+(s.includes("LONG")?"long":s.includes("SHORT")?"short":"wait")}
+
+function calcRR(levels,decision){
+  if(!levels||levels.entry==null||levels.stop==null)return null;
+  const entry=Number(levels.entry),stop=Number(levels.stop),tp1=Number(levels.tp1),tp2=Number(levels.tp2);
+  const risk=Math.abs(entry-stop);
+  if(!risk)return null;
+  return {
+    rr1:Number.isFinite(tp1)?Math.abs(tp1-entry)/risk:null,
+    rr2:Number.isFinite(tp2)?Math.abs(tp2-entry)/risk:null,
+    riskPct:entry?risk/entry*100:null
+  };
+}
+function deriveMarketRegime(d){
+  const adxRow=d.advanced?.breakdown?.find(x=>x.label==="ADX / DI");
+  const volRow=d.advanced?.breakdown?.find(x=>x.label==="Volatilite");
+  const adxMatch=adxRow?.text?.match(/ADX\s+([\d.]+)/);
+  const atrMatch=volRow?.text?.match(/ATR\s+([\d.]+)%/);
+  const adx=adxMatch?Number(adxMatch[1]):null, atr=atrMatch?Number(atrMatch[1]):null;
+  if(atr!=null&&atr>3.5)return {value:"🔴 AŞIRI VOLATİL",note:`ATR ${atr.toFixed(2)}% • stop avı / sert fitil riski yüksek.`};
+  if(adx!=null&&adx>=25)return {value:"🟢 TREND PİYASASI",note:`ADX ${adx.toFixed(1)} • yönlü hareket daha belirgin.`};
+  if(adx!=null&&adx<20)return {value:"🟡 YATAY / ZAYIF TREND",note:`ADX ${adx.toFixed(1)} • kırılım teyidi beklemek daha önemli.`};
+  return {value:"🟠 GEÇİŞ PİYASASI",note:"Trend gücü orta seviyede; ek teyit faydalı."};
+}
+function updateDecisionExtras(d){
+  const reg=deriveMarketRegime(d);
+  $("marketRegime").textContent=reg.value;
+  $("marketRegimeNote").textContent=reg.note;
+
+  const conflict=$("conflictBox");
+  const opposite=d.legacy?.signal!=="BEKLE"&&d.advanced?.signal!=="BEKLE"&&d.legacy?.signal!==d.advanced?.signal;
+  if(opposite){
+    conflict.className="conflict-box show quality-bad";
+    conflict.textContent=`⚠️ Sistemler ters yönde: 7'li ${d.legacy.signal}, 100 puanlık ${d.advanced.signal}. İşlem riski yüksek.`;
+  }else if(d.common?.decision==="BEKLE"&&d.advanced?.signal!=="BEKLE"){
+    conflict.className="conflict-box show quality-warn";
+    conflict.textContent=`⚠️ 100 puanlık sistem ${d.advanced.signal} yönü veriyor ancak ortak teyit yok.`;
+  }else{
+    conflict.className="conflict-box";
+    conflict.textContent="";
+  }
+
+  const rr=calcRR(d.levels,d.common?.decision);
+  if(rr){
+    $("rr1").textContent=rr.rr1!=null?`1:${rr.rr1.toFixed(2)}`:"—";
+    $("rr2").textContent=rr.rr2!=null?`1:${rr.rr2.toFixed(2)}`:"—";
+    $("riskPct").textContent=rr.riskPct!=null?`${rr.riskPct.toFixed(2)}%`:"—";
+    const quality=(rr.rr2>=1.5&&d.advanced.score>=80)||(rr.rr2>=1.5&&d.advanced.score<=20);
+    $("tradeQuality").textContent=quality?"UYGUN":"TEMKİNLİ";
+  }else{
+    $("rr1").textContent=$("rr2").textContent=$("riskPct").textContent=$("tradeQuality").textContent="—";
+  }
+}
+
 async function analyze(){
  let symbol=$("symbol").value,interval=$("interval").value;$("status").textContent="Analiz ediliyor...";
  try{let r=await fetch(`/api/analyze?symbol=${symbol}&interval=${interval}`),d=await r.json();if(!r.ok)throw Error(d.error);
@@ -521,6 +608,7 @@ async function analyze(){
  $("breakdown").innerHTML=d.advanced.breakdown.map(x=>`<div class="metric"><div class="k">${x.label}</div><div class="v">${x.score}/${x.max}</div><div class="sub">${x.text}</div></div>`).join("");
  if(d.levels.entry!=null){$("entryZone").textContent=`${fmt(d.levels.entryLow)} – ${fmt(d.levels.entryHigh)}`;$("stop").textContent=fmt(d.levels.stop);$("tp1").textContent=fmt(d.levels.tp1);$("tp2").textContent=fmt(d.levels.tp2)}else{$("entryZone").textContent=$("stop").textContent=$("tp1").textContent=$("tp2").textContent="—"}
  $("entryReason").textContent=(d.levels.source && d.levels.source!=="SEVİYE YOK" ? d.levels.source+" • " : "")+d.levels.reason;
+ updateDecisionExtras(d);
  $("reasons").innerHTML=d.legacy.reasons.map(x=>`<div class="row"><span>${x.label}</span><span class="${x.bias>0?"pos":x.bias<0?"neg":"neu"}">${x.text}</span></div>`).join("");
  $("status").textContent=`${d.symbol} • ${d.interval} • Anlık fiyat ${fmt(d.price)} • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")}`;
  saveAnalysisRecord(d);
@@ -570,7 +658,8 @@ function scanItem(x){
   return `<div class="scan-item" data-symbol="${x.symbol}">
     <div>
       <div class="scan-symbol">${x.symbol}</div>
-      <div class="scan-detail">${label} • ${x.reason}<br>Fiyat: ${fmt(x.price)}</div>
+      <div class="scan-detail">${label} • ${x.reason}<br>Fiyat: ${fmt(x.price)}${x.adx!=null?` • ADX ${x.adx.toFixed(1)}`:""}${x.rvol!=null?` • RVOL ${x.rvol.toFixed(2)}`:""}</div>
+      <div class="quality-row">${x.qualityPass?`<span class="quality-pill quality-good">KALİTELİ</span>`:`<span class="quality-pill quality-warn">STANDART</span>`}</div>
       <div class="scan-action">Dokun → pariteyi analiz alanına taşı</div>
     </div>
     <div class="scan-score ${cls}">${x.score}/100</div>
@@ -581,7 +670,8 @@ function renderScanResults(){
   let items=[];
   if(scanFilter==="ALL") items=[...(scanData.strongLong||[]),...(scanData.strongShort||[])];
   else if(scanFilter==="LONG") items=[...(scanData.strongLong||[])];
-  else items=[...(scanData.strongShort||[])];
+  else if(scanFilter==="SHORT") items=[...(scanData.strongShort||[])];
+  else items=[...(scanData.strongLong||[]),...(scanData.strongShort||[])].filter(x=>x.qualityPass);
 
   $("scanResults").innerHTML=items.length
     ? items.map(scanItem).join("")
@@ -662,9 +752,11 @@ function saveSignalRecord(d){
     entryLow:d.levels?.entryLow??null,entryHigh:d.levels?.entryHigh??null,
     stop:d.levels?.stop??null,tp1:d.levels?.tp1??null,tp2:d.levels?.tp2??null,
     source:d.levels?.source||"",
+    outcome:"AÇIK", outcomeTime:null,
     time:d.timestamp||new Date().toISOString()
   };
-  signalHistory=[rec,...signalHistory].slice(0,80);
+  const recentSame=signalHistory.find(x=>x.symbol===rec.symbol&&x.direction===rec.direction&&(new Date(rec.time)-new Date(x.time))<15*60*1000);
+  if(!recentSame) signalHistory=[rec,...signalHistory].slice(0,80);
   saveJSON("bsa_signals",signalHistory);
 }
 function addNotification(rec){
@@ -735,6 +827,7 @@ function openAppView(view){
     notificationsView:"Bildirimler",
     settingsView:"Ayarlar",
     chartsView:"Grafikler",
+    performanceView:"Performans",
     signalsView:"Geçmiş Sinyaller"
   };
   $("viewTitle").textContent=titles[view]||"Menü";
@@ -758,22 +851,10 @@ function renderView(view){
   if(view==="notificationsView")return renderNotificationsView();
   if(view==="settingsView")return renderSettingsView();
   if(view==="chartsView")return renderChartsView();
+  if(view==="performanceView")return renderPerformanceView();
   if(view==="signalsView")return renderSignalsView();
 }
-function renderFavoritesView(){
-  const items=fav.length?fav.map(s=>`
-    <div class="menu-card">
-      <div class="menu-card-row">
-        <div>
-          <div class="menu-card-title">${esc(s)}</div>
-          <div class="menu-card-sub">Dokunarak analiz ekranına taşı.</div>
-        </div>
-        <div style="display:flex;gap:6px">
-          <button class="small-btn fav-use" data-symbol="${esc(s)}" type="button">AÇ</button>
-          <button class="small-btn danger-btn fav-remove" data-symbol="${esc(s)}" type="button">SİL</button>
-        </div>
-      </div>
-    </div>`).join(""):`<div class="empty-state">Henüz favori yok.</div>`;
+async function renderFavoritesView(){
   $("viewBody").innerHTML=`
     <div class="menu-card">
       <div class="menu-card-title">Favori parite ekle</div>
@@ -781,16 +862,46 @@ function renderFavoritesView(){
         <input id="favInput" value="${esc($("symbol").value)}" placeholder="BTCUSDT">
         <button id="favAdd" class="small-btn" type="button">EKLE</button>
       </div>
-    </div>${items}`;
+    </div>
+    <div id="favOverview"><div class="empty-state">Favoriler yükleniyor...</div></div>`;
+
   $("favAdd").onclick=()=>{
     const s=$("favInput").value.trim().toUpperCase().replace(/[^A-Z0-9]/g,"");
     if(!s)return;
-    fav=uniqueBySymbol([s,...fav]).slice(0,20);saveJSON("bsa_favorites",fav);renderFav();renderFavoritesView();
+    fav=uniqueBySymbol([s,...fav]).slice(0,20);
+    saveJSON("bsa_favorites",fav);renderFav();renderFavoritesView();
   };
-  document.querySelectorAll(".fav-use").forEach(b=>b.onclick=()=>selectSymbolFromMenu(b.dataset.symbol));
-  document.querySelectorAll(".fav-remove").forEach(b=>b.onclick=()=>{
-    fav=fav.filter(x=>x!==b.dataset.symbol);saveJSON("bsa_favorites",fav);renderFav();renderFavoritesView();
-  });
+
+  if(!fav.length){$("favOverview").innerHTML=`<div class="empty-state">Henüz favori yok.</div>`;return}
+
+  try{
+    const r=await fetch(`/api/overview?symbols=${encodeURIComponent(fav.join(","))}&interval=${encodeURIComponent(appSettings.defaultInterval||"5m")}`);
+    const d=await r.json();
+    if(!r.ok)throw Error(d.error||"Favoriler alınamadı");
+    $("favOverview").innerHTML=d.items.map(x=>`
+      <div class="menu-card">
+        <div class="fav-overview">
+          <div>
+            <div class="menu-card-title">${esc(x.symbol)} • ${fmt(x.price)}</div>
+            <div class="menu-card-sub">${esc(x.label)} • ${x.score}/100 • ${x.changePct>=0?"+":""}${x.changePct.toFixed(2)}%</div>
+            <span class="signal-badge ${x.score>=65?"long":x.score<=35?"short":"wait"}">${x.score>=80?"GÜÇLÜ LONG":x.score<=20?"GÜÇLÜ SHORT":x.score>=65?"LONG ADAYI":x.score<=35?"SHORT ADAYI":"BEKLE"}</span>
+          </div>
+          <svg class="mini-spark" viewBox="0 0 110 36" aria-label="${esc(x.symbol)} mini grafik">
+            <polyline points="${x.spark}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"></polyline>
+          </svg>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="small-btn fav-use" data-symbol="${esc(x.symbol)}" type="button">ANALİZ</button>
+          <button class="small-btn danger-btn fav-remove" data-symbol="${esc(x.symbol)}" type="button">SİL</button>
+        </div>
+      </div>`).join("");
+    document.querySelectorAll(".fav-use").forEach(b=>b.onclick=()=>selectSymbolFromMenu(b.dataset.symbol));
+    document.querySelectorAll(".fav-remove").forEach(b=>b.onclick=()=>{
+      fav=fav.filter(x=>x!==b.dataset.symbol);saveJSON("bsa_favorites",fav);renderFav();renderFavoritesView();
+    });
+  }catch(e){
+    $("favOverview").innerHTML=`<div class="empty-state">Favori verileri alınamadı: ${esc(e.message)}</div>`;
+  }
 }
 function renderRecentView(){
   $("viewBody").innerHTML=`
@@ -822,15 +933,38 @@ function renderRecentView(){
   };
   document.querySelectorAll(".recent-use").forEach(b=>b.onclick=()=>selectSymbolFromMenu(b.dataset.symbol,b.dataset.interval));
 }
-function renderSignalsView(){
+function outcomeClass(o){
+  if(o==="TP1"||o==="TP2")return"tp";
+  if(o==="SL")return"sl";
+  if(o==="AÇIK")return"open";
+  return"wait";
+}
+async function refreshSignalOutcomes(limit=20){
+  const targets=signalHistory.filter(x=>["AÇIK","GİRİŞ BEKLİYOR"].includes(x.outcome||"AÇIK")).slice(0,limit);
+  for(const x of targets){
+    if(x.entryLow==null||x.entryHigh==null||x.stop==null||x.tp1==null)continue;
+    try{
+      const u=`/api/signal-status?symbol=${encodeURIComponent(x.symbol)}&interval=${encodeURIComponent(x.interval)}&time=${encodeURIComponent(x.time)}&direction=${encodeURIComponent(x.direction)}&entryLow=${x.entryLow}&entryHigh=${x.entryHigh}&stop=${x.stop}&tp1=${x.tp1}&tp2=${x.tp2??""}`;
+      const r=await fetch(u),d=await r.json();
+      if(r.ok){x.outcome=d.outcome;x.outcomeTime=d.outcomeTime||null;x.entryTime=d.entryTime||null}
+    }catch(e){}
+  }
+  saveJSON("bsa_signals",signalHistory);
+}
+async function renderSignalsView(){
+  $("viewBody").innerHTML=`<div class="empty-state">Sinyal sonuçları kontrol ediliyor...</div>`;
+  await refreshSignalOutcomes(25);
   $("viewBody").innerHTML=`
     <div class="menu-card">
       <div class="menu-card-row">
         <div>
           <div class="menu-card-title">Geçmiş Sinyaller</div>
-          <div class="menu-card-sub">Kaydedilen LONG/SHORT sinyal geçmişini temizleyebilirsin.</div>
+          <div class="menu-card-sub">TP1 / TP2 / SL / AÇIK sonuçları Binance mumları üzerinden takip edilir.</div>
         </div>
-        <button id="clearSignals" class="small-btn danger-btn" type="button">GEÇMİŞİ SİL</button>
+        <div style="display:flex;gap:6px">
+          <button id="refreshSignals" class="small-btn" type="button">GÜNCELLE</button>
+          <button id="clearSignals" class="small-btn danger-btn" type="button">SİL</button>
+        </div>
       </div>
     </div>
     ${signalHistory.length?signalHistory.map(x=>`
@@ -840,17 +974,17 @@ function renderSignalsView(){
           <div class="menu-card-title">${esc(x.symbol)} • ${esc(x.interval)}</div>
           <div class="menu-card-sub">${new Date(x.time).toLocaleString("tr-TR")} • Skor ${x.advancedScore??"—"}/100 • Fiyat ${fmt(x.price)}</div>
           <span class="signal-badge ${x.direction==="LONG"?"long":"short"}">${esc(x.direction)}</span>
-          ${x.entryLow!=null?`<div class="menu-card-sub">Giriş ${fmt(x.entryLow)} – ${fmt(x.entryHigh)} • SL ${fmt(x.stop)} • TP1 ${fmt(x.tp1)}</div>`:""}
+          <span class="outcome ${outcomeClass(x.outcome||"AÇIK")}">${esc(x.outcome||"AÇIK")}</span>
+          ${x.entryLow!=null?`<div class="menu-card-sub">Giriş ${fmt(x.entryLow)} – ${fmt(x.entryHigh)} • SL ${fmt(x.stop)} • TP1 ${fmt(x.tp1)} • TP2 ${fmt(x.tp2)}</div>`:""}
         </div>
         <button class="small-btn signal-use" data-symbol="${esc(x.symbol)}" data-interval="${esc(x.interval)}" type="button">AÇ</button>
       </div>
     </div>`).join(""):`<div class="empty-state">Henüz kayıtlı LONG/SHORT sinyali yok.</div>`}`;
   $("clearSignals").onclick=()=>{
     if(!confirm("Tüm geçmiş sinyaller silinsin mi?")) return;
-    signalHistory=[];
-    saveJSON("bsa_signals",signalHistory);
-    renderSignalsView();
+    signalHistory=[];saveJSON("bsa_signals",signalHistory);renderSignalsView();
   };
+  $("refreshSignals").onclick=renderSignalsView;
   document.querySelectorAll(".signal-use").forEach(b=>b.onclick=()=>selectSymbolFromMenu(b.dataset.symbol,b.dataset.interval));
 }
 function renderNotificationsView(){
@@ -871,6 +1005,53 @@ function renderNotificationsView(){
         <span class="signal-badge ${x.direction==="LONG"?"long":"short"}">${esc(x.direction)}</span>
       </div>`).join(""):`<div class="empty-state">Yeni bildirim yok.</div>`}`;
   $("clearNotifs").onclick=()=>{notificationLog=[];saveJSON("bsa_notifications",notificationLog);renderNotificationsView()};
+}
+
+
+async function renderPerformanceView(){
+  $("viewBody").innerHTML=`<div class="empty-state">Performans için sinyal sonuçları güncelleniyor...</div>`;
+  await refreshSignalOutcomes(30);
+  const done=signalHistory.filter(x=>["TP1","TP2","SL"].includes(x.outcome));
+  const wins=done.filter(x=>["TP1","TP2"].includes(x.outcome));
+  const losses=done.filter(x=>x.outcome==="SL");
+  const longs=done.filter(x=>x.direction==="LONG"), shorts=done.filter(x=>x.direction==="SHORT");
+  const longWins=longs.filter(x=>["TP1","TP2"].includes(x.outcome)).length;
+  const shortWins=shorts.filter(x=>["TP1","TP2"].includes(x.outcome)).length;
+  const tp1=done.filter(x=>x.outcome==="TP1").length,tp2=done.filter(x=>x.outcome==="TP2").length;
+  const rate=(a,b)=>b?Math.round(a/b*100):0;
+
+  const bySymbol={};
+  for(const x of done){
+    bySymbol[x.symbol]??={n:0,w:0};
+    bySymbol[x.symbol].n++;
+    if(x.outcome==="TP1"||x.outcome==="TP2")bySymbol[x.symbol].w++;
+  }
+  const bestSymbol=Object.entries(bySymbol).sort((a,b)=>(b[1].w/b[1].n)-(a[1].w/a[1].n))[0];
+
+  const byInterval={};
+  for(const x of done){
+    byInterval[x.interval]??={n:0,w:0};
+    byInterval[x.interval].n++;
+    if(x.outcome==="TP1"||x.outcome==="TP2")byInterval[x.interval].w++;
+  }
+  const bestInterval=Object.entries(byInterval).sort((a,b)=>(b[1].w/b[1].n)-(a[1].w/a[1].n))[0];
+
+  $("viewBody").innerHTML=`
+    <div class="performance-grid">
+      <div class="menu-card"><div class="menu-card-sub">Tamamlanan</div><div class="performance-big">${done.length}</div></div>
+      <div class="menu-card"><div class="menu-card-sub">Kazanma oranı</div><div class="performance-big">${rate(wins.length,done.length)}%</div></div>
+      <div class="menu-card"><div class="menu-card-sub">TP1 / TP2</div><div class="performance-big">${tp1} / ${tp2}</div></div>
+      <div class="menu-card"><div class="menu-card-sub">SL</div><div class="performance-big">${losses.length}</div></div>
+    </div>
+    <div class="menu-card">
+      <div class="menu-card-title">Yön performansı</div>
+      <div class="menu-card-sub" style="margin-top:7px">LONG: ${rate(longWins,longs.length)}% (${longWins}/${longs.length}) • SHORT: ${rate(shortWins,shorts.length)}% (${shortWins}/${shorts.length})</div>
+    </div>
+    <div class="menu-card">
+      <div class="menu-card-title">En iyi gözlenenler</div>
+      <div class="menu-card-sub" style="margin-top:7px">Parite: ${bestSymbol?`${esc(bestSymbol[0])} • ${rate(bestSymbol[1].w,bestSymbol[1].n)}%`:"Yeterli veri yok"}<br>Zaman dilimi: ${bestInterval?`${esc(bestInterval[0])} • ${rate(bestInterval[1].w,bestInterval[1].n)}%`:"Yeterli veri yok"}</div>
+    </div>
+    <div class="menu-card"><div class="menu-card-sub">Bu ekran yalnızca uygulamanın kaydettiği ve sonucu belirlenebilen sinyalleri ölçer; geçmiş performans gelecekteki sonucu garanti etmez.</div></div>`;
 }
 
 let tvLibPromise=null;
@@ -1104,6 +1285,10 @@ function renderSettingsView(){
       <div class="setting-row">
         <div><div class="setting-label">Güçlü SHORT bildirimi</div><div class="setting-desc">20 ve altı yeni sinyallerini kaydet.</div></div>
         <input id="setShortNotif" type="checkbox">
+      </div>
+      <div class="setting-row">
+        <div><div class="setting-label">Kaliteli sinyal kriteri</div><div class="setting-desc">ADX ≥20, RVOL ≥1.0, uygun ATR ve güçlü skor. Tarama ekranında KALİTELİ filtresiyle kullanılır.</div></div>
+        <span class="quality-pill quality-good">AKTİF</span>
       </div>
       <div class="setting-row">
         <div><div class="setting-label">Sinyale dokununca otomatik analiz</div><div class="setting-desc">Canlı sinyal kartına dokununca ANALİZ'i otomatik çalıştır.</div></div>
