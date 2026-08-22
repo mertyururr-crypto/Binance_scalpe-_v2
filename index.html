@@ -145,11 +145,60 @@ button.secondary{background:#2b333d;color:#fff}
   .wrap{max-width:980px}
   .grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
+
+.scanner{
+  margin-top:12px;padding-top:12px;border-top:1px solid var(--border)
+}
+.scanner-head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px
+}
+.scanner-title{
+  font-size:12px;font-weight:900;letter-spacing:.5px
+}
+.scan-btn{
+  width:auto;min-width:72px;min-height:36px;padding:0 12px;
+  background:#2b333d;color:#fff;border:1px solid var(--border);
+  border-radius:999px;font-size:12px
+}
+.scan-results{
+  display:grid;grid-template-columns:1fr;gap:7px;margin-top:9px
+}
+.scan-item{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;
+  gap:8px;align-items:center;background:var(--p2);
+  border:1px solid var(--border);border-radius:12px;padding:10px
+}
+.scan-symbol{font-weight:900;font-size:14px;overflow-wrap:anywhere}
+.scan-detail{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.35}
+.scan-score{font-size:18px;font-weight:900;white-space:nowrap}
+.scan-long{color:var(--green)}
+.scan-short{color:var(--red)}
+.scan-empty{
+  background:var(--p2);border:1px solid var(--border);
+  border-radius:12px;padding:10px;font-size:12px;color:var(--muted)
+}
+@media (min-width:600px){
+  .scan-results{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
 </style></head>
 <body><div class="wrap">
 <div class="card"><h1>Binance Futures Scalp Analyzer</h1><div class="sub">7'li sistem + 100 puan + ortak karar + backtest</div>
 <div class="controls"><div class="picker"><input id="symbol" value="1000PEPEUSDT" placeholder="Parite ara..."><div id="list" class="list"></div></div><select id="interval"><option>1m</option><option>3m</option><option selected>5m</option><option>15m</option><option>1h</option></select><button id="analyze">ANALİZ</button><button id="backtest" class="secondary">BACKTEST</button></div>
-<div id="favorites" class="favorites"></div><div id="status" class="status" style="margin-top:9px">Hazır.</div></div>
+<div id="favorites" class="favorites"></div>
+<div class="scanner">
+  <div class="scanner-head">
+    <div>
+      <div class="scanner-title">CANLI GÜÇLÜ SİNYALLER</div>
+      <div id="scanMeta" class="sub">Piyasa taraması hazırlanıyor...</div>
+    </div>
+    <button id="scanNow" class="scan-btn" type="button">TARA</button>
+  </div>
+  <div id="scanResults" class="scan-results">
+    <div class="sub">Güçlü LONG / SHORT adayları burada görünecek.</div>
+  </div>
+</div>
+<div id="status" class="status" style="margin-top:9px">Hazır.</div></div>
 
 <div class="card"><div class="k">ORTAK KARAR</div><div class="signal"><div><div id="decision" class="word wait">BEKLE</div><div id="note" class="sub">Henüz analiz yapılmadı.</div></div><div><div id="commonConf" class="conf">—</div><div class="sub">ortak güven</div></div></div></div>
 
@@ -195,4 +244,41 @@ async function backtest(){
  }catch(e){$("btStatus").textContent="Backtest hatası: "+e.message}
 }
 $("analyze").onclick=analyze;$("backtest").onclick=backtest;renderFav();loadSymbols();
+
+let scanTimer=null;
+function scanItem(x){
+  const isLong=x.direction==="LONG";
+  const cls=isLong?"scan-long":"scan-short";
+  const label=isLong?"GÜÇLÜ LONG":"GÜÇLÜ SHORT";
+  return `<div class="scan-item">
+    <div>
+      <div class="scan-symbol">${x.symbol}</div>
+      <div class="scan-detail">${label} • ${x.reason}<br>Fiyat: ${fmt(x.price)}</div>
+    </div>
+    <div class="scan-score ${cls}">${x.score}/100</div>
+  </div>`;
+}
+async function runScanner(){
+  const btn=$("scanNow");
+  btn.disabled=true;
+  $("scanMeta").textContent="Piyasa taranıyor...";
+  try{
+    const r=await fetch("/api/scan");
+    const d=await r.json();
+    if(!r.ok)throw Error(d.error||"Tarama başarısız");
+    const items=[...(d.strongLong||[]),...(d.strongShort||[])];
+    $("scanResults").innerHTML=items.length
+      ? items.map(scanItem).join("")
+      : `<div class="scan-empty">Şu anda taranan paritelerde 80+ LONG veya 20- SHORT sinyali yok.</div>`;
+    $("scanMeta").textContent=`${d.scanned} likit parite tarandı • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")} • 60 sn'de bir yenilenir`;
+  }catch(e){
+    $("scanMeta").textContent="Tarama hatası: "+e.message;
+  }finally{
+    btn.disabled=false;
+  }
+}
+$("scanNow").addEventListener("click",runScanner);
+runScanner();
+scanTimer=setInterval(runScanner,60000);
+
 </script></body></html>
