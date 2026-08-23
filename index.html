@@ -1019,6 +1019,27 @@ async function loadMarketContext(symbol,baseDirection){
 }
 
 
+
+async function fetchBinanceTrKlinesDirect(symbol,interval,limit=320){
+  const clean=String(symbol||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+  const tf=String(interval||"5m");
+  const url=`https://api.binance.me/api/v1/klines?symbol=${encodeURIComponent(clean)}&interval=${encodeURIComponent(tf)}&limit=${Math.min(1000,Number(limit)||320)}`;
+  const r=await fetch(url,{method:"GET",mode:"cors",cache:"no-store",credentials:"omit"});
+  if(!r.ok)throw Error(`Binance TR veri HTTP ${r.status}`);
+  const j=await r.json();
+  const data=j&&typeof j==="object"&&"data" in j?j.data:j;
+  if(!Array.isArray(data)||!data.length)throw Error("Binance TR mum verisi boş");
+  return data;
+}
+async function getBinanceTrBundle(symbol,interval,limit=320){
+  const [k,k15,k1h]=await Promise.all([
+    fetchBinanceTrKlinesDirect(symbol,interval,limit),
+    fetchBinanceTrKlinesDirect(symbol,"15m",Math.min(1000,limit)),
+    fetchBinanceTrKlinesDirect(symbol,"1h",Math.min(500,limit))
+  ]);
+  return {k,k15,k1h};
+}
+
 function activeSignalProfile(){
   const p=String(appSettings.signalProfile||"balanced");
   return ["fast","balanced","safe"].includes(p)?p:"balanced";
@@ -1091,8 +1112,19 @@ async function analyze(){
  if(!symbol){$("status").textContent="Bu Margex paritesi için referans veri eşlemesi yok.";return}
  $("status").textContent="Analiz ediliyor...";
  try{
- const analyzeEndpoint=currentExchange()==="binancetr"?"/api/binance-tr-analyze":"/api/analyze";
- let r=await fetch(`${analyzeEndpoint}?symbol=${symbol}&interval=${interval}${profileParam()}`,{cache:"no-store"}),d=await r.json();if(!r.ok)throw Error(d.error);
+ let r,d;
+ if(currentExchange()==="binancetr"){
+   const bundle=await getBinanceTrBundle(symbol,interval,320);
+   r=await fetch("/api/binance-tr-analyze-local",{
+     method:"POST",headers:{"content-type":"application/json"},cache:"no-store",
+     body:JSON.stringify({symbol,interval,profile:activeSignalProfile(),...bundle})
+   });
+   d=await r.json();
+ }else{
+   r=await fetch(`/api/analyze?symbol=${symbol}&interval=${interval}${profileParam()}`,{cache:"no-store"});
+   d=await r.json();
+ }
+ if(!r.ok)throw Error(d.error||"Analiz başarısız");
  d=applyDisplayScale(d,displaySymbol);
  d.displaySymbol=displaySymbol;
  d.exchange=currentExchange();
@@ -1143,8 +1175,19 @@ async function backtest(){
  if(!symbol){$("btStatus").textContent="Bu Margex paritesi için referans veri eşlemesi yok.";return}
  $("btStatus").textContent="Backtest çalışıyor...";
  try{
- const btEndpoint=currentExchange()==="binancetr"?"/api/binance-tr-backtest":"/api/backtest";
- let r=await fetch(`${btEndpoint}?symbol=${symbol}&interval=${interval}&limit=1000${profileParam()}`,{cache:"no-store"}),d=await r.json();if(!r.ok)throw Error(d.error);
+ let r,d;
+ if(currentExchange()==="binancetr"){
+   const bundle=await getBinanceTrBundle(symbol,interval,1000);
+   r=await fetch("/api/binance-tr-backtest-local",{
+     method:"POST",headers:{"content-type":"application/json"},cache:"no-store",
+     body:JSON.stringify({symbol,interval,profile:activeSignalProfile(),...bundle})
+   });
+   d=await r.json();
+ }else{
+   r=await fetch(`/api/backtest?symbol=${symbol}&interval=${interval}&limit=1000${profileParam()}`,{cache:"no-store"});
+   d=await r.json();
+ }
+ if(!r.ok)throw Error(d.error||"Backtest başarısız");
  $("btResults").innerHTML=btCard("7'li Sistem",d.legacy)+btCard("100 Puan",d.advanced)+btCard("Ortak Karar",d.common);
  $("btStatus").textContent=`${d.symbol} • ${d.interval} • ${d.candles} mum test edildi.`;
  $("btMethod").textContent=d.methodology;
@@ -1305,9 +1348,26 @@ async function runScanner(){
   btn.disabled=true;
   $("scanMeta").textContent="Yeni piyasa taraması yapılıyor...";
   try{
-    const scanEndpoint=currentExchange()==="binancetr"?"/api/binance-tr-scan":"/api/scan";
-    const r=await fetch(`${scanEndpoint}?t=${Date.now()}${profileParam()}`,{cache:"no-store"});
-    const d=await r.json();
+    let r,d;
+    if(currentExchange()==="binancetr"){
+      const scanSymbols=["BTCTRY","ETHTRY","SOLTRY","XRPTRY","BNBTRY","DOGETRY","ADATRY","AVAXTRY"];
+      const rows=[];
+      for(const sym of scanSymbols){
+        try{
+          const bundle=await getBinanceTrBundle(sym,"5m",240);
+          rows.push({symbol:sym,...bundle});
+        }catch(e){}
+      }
+      if(!rows.length)throw Error("Binance TR mum verisi cihazdan alınamadı.");
+      r=await fetch("/api/binance-tr-scan-local",{
+        method:"POST",headers:{"content-type":"application/json"},cache:"no-store",
+        body:JSON.stringify({profile:activeSignalProfile(),rows})
+      });
+      d=await r.json();
+    }else{
+      r=await fetch(`/api/scan?t=${Date.now()}${profileParam()}`,{cache:"no-store"});
+      d=await r.json();
+    }
     if(!r.ok)throw Error(d.error||"Tarama başarısız");
     scanData={strongLong:d.strongLong||[],strongShort:d.strongShort||[],btcDirection:d.btcDirection||"NEUTRAL",btcScore:d.btcScore??50};
     renderScanResults();
@@ -1316,7 +1376,7 @@ async function runScanner(){
       : `${d.scanned} likit parite • BTC ${d.btcDirection||"NEUTRAL"} ${d.btcScore??50}/100 • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")} • ${appSettings.scanSeconds} sn`;
     processScannerNotifications(d);
   }catch(e){
-    $("scanMeta").textContent="Tarama hatası: "+e.message;
+    $("scanMeta").textContent="Tarama hatası: "+e.message+(currentExchange()==="binancetr"?" • Binance TR bağlantısını kontrol et.":"");
   }finally{
     btn.disabled=false;
   }
