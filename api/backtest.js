@@ -2,7 +2,9 @@
 function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
 
 const PROFILES={
-  balanced:{name:"balanced",label:"BALANCED",candidateLong:72,candidateShort:28,strongLong:84,strongShort:16,minConf:3},
+  fast:{name:"fast",label:"HIZLI",candidateLong:68,candidateShort:32,strongLong:80,strongShort:20,minConf:2},
+  balanced:{name:"balanced",label:"DENGELİ",candidateLong:72,candidateShort:28,strongLong:84,strongShort:16,minConf:3},
+  safe:{name:"safe",label:"GÜVENLİ",candidateLong:76,candidateShort:24,strongLong:88,strongShort:12,minConf:4},
   strict:{name:"strict",label:"STRICT",candidateLong:74,candidateShort:26,strongLong:86,strongShort:14,minConf:3},
   selective:{name:"selective",label:"SELECTIVE",candidateLong:74,candidateShort:26,strongLong:84,strongShort:16,minConf:4},
   ultra:{name:"ultra",label:"ULTRA",candidateLong:76,candidateShort:24,strongLong:88,strongShort:12,minConf:4}
