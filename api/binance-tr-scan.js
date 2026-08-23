@@ -252,19 +252,21 @@ function unwrapTr(j){
   return j&&typeof j==="object"&&"data" in j?j.data:j;
 }
 async function trKlines(symbol,interval,limit=320){
-  const clean=String(symbol).toUpperCase().replace(/[^A-Z0-9]/g,"");
-  const urls=[
-    `${TR_MAIN}/api/v1/klines?symbol=${encodeURIComponent(clean)}&interval=${encodeURIComponent(interval)}&limit=${Math.min(1000,limit)}`,
-    `${TR_NEXT}/api/v1/klines?symbol=${encodeURIComponent(clean)}&interval=${encodeURIComponent(interval)}&limit=${Math.min(1000,limit)}`
-  ];
-  let lastErr=null;
-  for(const url of urls){
-    try{
-      const x=unwrapTr(await trFetchJson(url));
-      if(Array.isArray(x)&&x.length)return x;
-    }catch(e){lastErr=e}
-  }
-  throw lastErr||new Error("Binance TR mum verisi alınamadı");
+  const clean=String(symbol||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+  const tf=String(interval||"5m");
+  if(!clean||!["1m","3m","5m","15m","1h"].includes(tf))throw new Error("Geçersiz Binance TR mum parametresi");
+  const qs=new URLSearchParams({
+    symbol:clean,
+    interval:tf,
+    limit:String(Math.min(1000,Math.max(1,Number(limit)||320)))
+  });
+  const url=`https://api.binance.me/api/v1/klines?${qs.toString()}`;
+  const r=await fetch(url,{headers:{accept:"application/json"}});
+  if(!r.ok)throw new Error(`Binance TR mum HTTP ${r.status}`);
+  const j=await r.json();
+  const x=unwrapTr(j);
+  if(!Array.isArray(x)||!x.length)throw new Error("Binance TR mum cevabı boş");
+  return x;
 }
 async function trSymbolsRaw(){
   const raw=await trFetchJson(`${TR_GENERAL}/open/v1/common/symbols`);
@@ -274,25 +276,21 @@ async function trSymbolsRaw(){
   return list;
 }
 
-const TR_PRIORITY=["BTC","ETH","SOL","XRP","BNB","DOGE","ADA","AVAX","LINK","LTC","DOT","TRX","NEAR","ATOM","UNI","AAVE","ARB","OP","PEPE","SHIB","BONK","API3","SUI","WLD"];
+const TR_SCAN_SYMBOLS=[
+  "BTCTRY","ETHTRY","SOLTRY","XRPTRY","BNBTRY","DOGETRY",
+  "ADATRY","AVAXTRY","LINKTRY","LTCTRY","DOTTRY","TRXTRY",
+  "NEARTRY","ATOMTRY","UNITRY","AAVETRY","ARBTRY","OPTRY"
+];
 
 export default async function handler(req,res){
   try{
     const profile=getProfile(req.query.profile).name,cfg=getProfile(profile);
-    const raw=await trSymbolsRaw();
-    const all=raw.filter(x=>String(x?.quoteAsset||"").toUpperCase()==="TRY")
-      .map(x=>({
-        symbol:String(x?.symbol||"").replace(/_/g,"").toUpperCase(),
-        rawSymbol:String(x?.symbol||"").toUpperCase(),
-        base:String(x?.baseAsset||"").toUpperCase(),
-        symbolType:Number(x?.type||1)
-      }))
-      .filter(x=>x.symbol&&x.base);
-    const byBase=new Map(all.map(x=>[x.base,x]));
-    const selected=[];
-    for(const b of TR_PRIORITY){if(byBase.has(b))selected.push(byBase.get(b))}
-    for(const x of all){if(selected.length>=18)break;if(!selected.some(y=>y.symbol===x.symbol))selected.push(x)}
+    const selected=TR_SCAN_SYMBOLS.map(symbol=>({
+      symbol,
+      base:symbol.endsWith("TRY")?symbol.slice(0,-3):symbol
+    }));
     const baseRows=[];
+    const skipped=[];
     for(let i=0;i<selected.length;i+=4){
       const chunk=selected.slice(i,i+4);
       const rows=await Promise.all(chunk.map(async x=>{
@@ -302,7 +300,10 @@ export default async function handler(req,res){
           const d=calcAll(u.o,u.h,u.l,u.c,u.v),n=u.c.length-1;
           const rough=optimizedAt(d,u.o,u.h,u.l,u.c,u.v,n,{m15:0,h1:0},profile);
           return {symbol:x.symbol,base:x.base,k,u,d,n,rough};
-        }catch(e){return null}
+        }catch(e){
+          skipped.push({symbol:x.symbol,error:e?.message||"veri alınamadı"});
+          return null;
+        }
       }));
       baseRows.push(...rows.filter(Boolean));
     }
@@ -312,8 +313,11 @@ export default async function handler(req,res){
       const chunk=candidates.slice(i,i+3);
       const rows=await Promise.all(chunk.map(async x=>{
         try{
-          const [k15,k1h]=await Promise.all([trKlines(x.symbol,"15m",220),trKlines(x.symbol,"1h",220)]);
-          const mtf={m15:tfBiasFromKlines(k15),h1:tfBiasFromKlines(k1h)};
+          let mtf={m15:0,h1:0};
+          try{
+            const [k15,k1h]=await Promise.all([trKlines(x.symbol,"15m",220),trKlines(x.symbol,"1h",220)]);
+            mtf={m15:tfBiasFromKlines(k15),h1:tfBiasFromKlines(k1h)};
+          }catch(e){}
           const z=optimizedAt(x.d,x.u.o,x.u.h,x.u.l,x.u.c,x.u.v,x.n,mtf,profile);
           if(z.signal==="BEKLE")return null;
           const direction=z.signal,shock=z.metrics.atrPct>3.2||z.metrics.bodyAtr>2.1;
@@ -328,6 +332,7 @@ export default async function handler(req,res){
     res.setHeader("Cache-Control","no-store");
     return res.status(200).json({
       exchange:"binancetr",marketType:"SPOT",profile,scanned:baseRows.length,
+      requested:TR_SCAN_SYMBOLS.length,skipped:skipped.slice(0,8),
       btcDirection:"NEUTRAL",btcScore:50,strongLong,strongShort,
       spotNote:"SHORT sonuçları spotta short pozisyon değildir; elindeki varlık için SAT/azalt sinyali olarak yorumlanır.",
       timestamp:new Date().toISOString()
