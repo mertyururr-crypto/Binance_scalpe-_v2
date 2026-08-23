@@ -213,37 +213,63 @@ function summarize(trades){
   const expectancy=r.length?(w*1.55-l*1.15)/r.length:0;
   return {signals:trades.length,resolved:r.length,wins:w,losses:l,open:trades.length-r.length,winRate:+wr.toFixed(1),profitFactor:+pf.toFixed(2),expectancyR:+expectancy.toFixed(2)}
 }
+
+const DEFAULT_SYMBOLS=["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","1000PEPEUSDT"];
+function scoreProfileRow(trades){
+  const x=summarize(trades);
+  const signalPenalty=x.resolved<18?(18-x.resolved)*0.035:0;
+  const pf=Math.min(x.profitFactor||0,3);
+  const score=(x.expectancyR||0)*2.2+pf*.28+(x.winRate||0)/100*.35-signalPenalty;
+  return {...x,objective:+score.toFixed(3)}
+}
+async function testSymbol(symbol,profile){
+  const base="https://fapi.binance.com";
+  const [k,k15,k1h]=await Promise.all([
+    getJson(`${base}/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=1500`),
+    getJson(`${base}/fapi/v1/klines?symbol=${symbol}&interval=15m&limit=1000`),
+    getJson(`${base}/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=500`)
+  ]);
+  const u=unpack(k,false),d=calcAll(u.o,u.h,u.l,u.c,u.v),trades=[];
+  for(let i=220;i<u.c.length-13;i++){
+    const mtf={m15:tfBiasFromKlines(k15,u.t[i]),h1:tfBiasFromKlines(k1h,u.t[i])};
+    const adv=optimizedAt(d,u.o,u.h,u.l,u.c,u.v,i,mtf,profile);
+    if(adv.signal==="BEKLE")continue;
+    const a=d.atrV[i];if(!a)continue;
+    trades.push(evalTrade(adv.signal,u.o[i+1],a,u.h.slice(i+1,i+13),u.l.slice(i+1,i+13)));
+  }
+  return scoreProfileRow(trades);
+}
 export default async function handler(req,res){
   try{
-    const symbol=String(req.query.symbol||"BTCUSDT").toUpperCase(),interval=String(req.query.interval||"5m"),profile=getProfile(req.query.profile).name;
-    if(!/^[A-Z0-9]{5,20}$/.test(symbol))return res.status(400).json({error:"Geçersiz sembol."});
-    if(!["1m","3m","5m","15m","1h"].includes(interval))return res.status(400).json({error:"Geçersiz zaman dilimi."});
-    const base="https://fapi.binance.com";
-    const [k,k15,k1h]=await Promise.all([
-      getJson(`${base}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=1500`),
-      getJson(`${base}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=15m&limit=1000`),
-      getJson(`${base}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=1h&limit=500`)
-    ]);
-    const u=unpack(k,false),d=calcAll(u.o,u.h,u.l,u.c,u.v);
-    const legacyTrades=[],advancedTrades=[],commonTrades=[];
-    const horizon=12,start=220;
-    for(let i=start;i<u.c.length-horizon-1;i++){
-      const at=u.t[i],mtf={m15:tfBiasAtSeries(k15,at),h1:tfBiasAtSeries(k1h,at)};
-      const legacy=legacyAt(d,u.o,u.h,u.l,u.c,u.v,i,false);
-      const advanced=optimizedAt(d,u.o,u.h,u.l,u.c,u.v,i,mtf,profile);
-      const common=commonDecision(legacy,advanced);
-      const entry=u.o[i+1],a=d.atrV[i];if(!a)continue;
-      if(legacy.signal!=="BEKLE")legacyTrades.push(evalTrade(legacy.signal,entry,a,u.h.slice(i+1,i+1+horizon),u.l.slice(i+1,i+1+horizon)));
-      if(advanced.signal!=="BEKLE")advancedTrades.push(evalTrade(advanced.signal,entry,a,u.h.slice(i+1,i+1+horizon),u.l.slice(i+1,i+1+horizon)));
-      const side=sideOfDecision(common.decision);if(side)commonTrades.push(evalTrade(side,entry,a,u.h.slice(i+1,i+1+horizon),u.l.slice(i+1,i+1+horizon)));
+    const symbols=String(req.query.symbols||DEFAULT_SYMBOLS.join(",")).split(",").map(x=>x.trim().toUpperCase()).filter(x=>/^[A-Z0-9]{5,20}$/.test(x)).slice(0,8);
+    const profileNames=Object.keys(PROFILES),profiles=[];
+    for(const p of profileNames){
+      const perPair=[];
+      for(const symbol of symbols){
+        try{perPair.push({symbol,...await testSymbol(symbol,p)})}
+        catch(e){perPair.push({symbol,error:e?.message||"test hatası"})}
+      }
+      const ok=perPair.filter(x=>!x.error);
+      const signals=ok.reduce((a,x)=>a+x.signals,0),resolved=ok.reduce((a,x)=>a+x.resolved,0),wins=ok.reduce((a,x)=>a+x.wins,0),losses=ok.reduce((a,x)=>a+x.losses,0);
+      const winRate=resolved?wins/resolved*100:0;
+      const grossProfit=wins*1.55,grossLoss=losses*1.15,pf=grossLoss?grossProfit/grossLoss:(grossProfit?99:0);
+      const expectancy=resolved?(grossProfit-grossLoss)/resolved:0;
+      const weakPairs=ok.filter(x=>x.resolved>=5&&x.expectancyR<0).length;
+      const objective=expectancy*2.5+Math.min(pf,3)*.3+(winRate/100)*.3-Math.max(0,35-resolved)*.02-weakPairs*.08;
+      profiles.push({
+        profile:p,label:PROFILES[p].label,thresholds:PROFILES[p],
+        combined:{signals,resolved,wins,losses,winRate:+winRate.toFixed(1),profitFactor:+pf.toFixed(2),expectancyR:+expectancy.toFixed(3),weakPairs,objective:+objective.toFixed(3)},
+        perPair
+      });
     }
+    profiles.sort((a,b)=>b.combined.objective-a.combined.objective);
+    const recommended=profiles[0];
     res.setHeader("Cache-Control","no-store");
     return res.status(200).json({
-      symbol,interval,candles:k.length,horizon,
-      methodology:`V7.1 ${profile}: kapanmış mum + 15m/1h teyidi + rejim filtreleri. Giriş sonraki mum açılışı; TP=1.55 ATR, SL=1.15 ATR; aynı mumda ikisi görülürse LOSS.`,
-      profile,
-      legacy:summarize(legacyTrades),advanced:summarize(advancedTrades),common:summarize(commonTrades),
+      symbols,interval:"5m",recommended:recommended.profile,recommendedLabel:recommended.label,
+      profiles,
+      methodology:"Son Binance Futures mumları; 5m giriş, 15m+1h teyit, sonraki mum açılışı, 12 mum horizon, TP 1.55 ATR / SL 1.15 ATR. Aynı mumda TP+SL görülürse LOSS.",
       timestamp:new Date().toISOString()
     });
-  }catch(e){return res.status(500).json({error:e?.message||"Backtest hatası."})}
+  }catch(e){return res.status(500).json({error:e?.message||"Optimizasyon hatası."})}
 }

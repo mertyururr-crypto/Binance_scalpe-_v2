@@ -1,5 +1,14 @@
 
 function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
+
+const PROFILES={
+  balanced:{name:"balanced",label:"BALANCED",candidateLong:72,candidateShort:28,strongLong:84,strongShort:16,minConf:3},
+  strict:{name:"strict",label:"STRICT",candidateLong:74,candidateShort:26,strongLong:86,strongShort:14,minConf:3},
+  selective:{name:"selective",label:"SELECTIVE",candidateLong:74,candidateShort:26,strongLong:84,strongShort:16,minConf:4},
+  ultra:{name:"ultra",label:"ULTRA",candidateLong:76,candidateShort:24,strongLong:88,strongShort:12,minConf:4}
+};
+function getProfile(name){return PROFILES[String(name||"balanced").toLowerCase()]||PROFILES.balanced}
+
 function ema(v,p){const k=2/(p+1),o=[v[0]];for(let i=1;i<v.length;i++)o.push(v[i]*k+o[i-1]*(1-k));return o}
 function sma(v,p){const o=Array(v.length).fill(null);let s=0;for(let i=0;i<v.length;i++){s+=v[i];if(i>=p)s-=v[i-p];if(i>=p-1)o[i]=s/p}return o}
 function std(v,p){const o=Array(v.length).fill(null);for(let i=p-1;i<v.length;i++){const a=v.slice(i-p+1,i+1),m=a.reduce((x,y)=>x+y,0)/p;o[i]=Math.sqrt(a.reduce((x,y)=>x+(y-m)**2,0)/p)}return o}
@@ -76,7 +85,8 @@ function legacyAt(d,o,h,l,c,v,n,withReasons=true){
   const confidence=Math.min(90,Math.round(48+Math.abs(L-S)*7+Math.max(L,S)*2));
   return {signal,confidence,longScore:L,shortScore:S,reasons}
 }
-function optimizedAt(d,o,h,l,c,v,n,mtf={m15:0,h1:0}){
+function optimizedAt(d,o,h,l,c,v,n,mtf={m15:0,h1:0},profileName="balanced"){
+  const cfg=getProfile(profileName);
   const a=d.atrV[n],atrPct=a/c[n]*100,rv=d.vma[n]?v[n]/d.vma[n]:1,adxV=d.adxD.adx[n],p=d.adxD.plusDI[n],m=d.adxD.minusDI[n];
   const hh20=Math.max(...h.slice(n-20,n)),ll20=Math.min(...l.slice(n-20,n));
   const breakoutUp=c[n]>hh20,breakoutDn=c[n]<ll20;
@@ -146,25 +156,25 @@ function optimizedAt(d,o,h,l,c,v,n,mtf={m15:0,h1:0}){
 
   score=Math.round(clamp(score,0,100));
   let signal="BEKLE",label="BEKLE";
-  const longCandidate=score>=72,shortCandidate=score<=28;
-  const longStrong=score>=84,shortStrong=score<=16;
-  if(!blockers.length&&confirmations>=3){
+  const longCandidate=score>=cfg.candidateLong,shortCandidate=score<=cfg.candidateShort;
+  const longStrong=score>=cfg.strongLong,shortStrong=score<=cfg.strongShort;
+  if(!blockers.length&&confirmations>=cfg.minConf){
     if(longStrong){signal="LONG";label="GÜÇLÜ LONG"}
     else if(shortStrong){signal="SHORT";label="GÜÇLÜ SHORT"}
     else if(longCandidate){signal="LONG";label="LONG ADAYI"}
     else if(shortCandidate){signal="SHORT";label="SHORT ADAYI"}
   }
-  return {score,label,signal,breakdown,blockers,confirmations,metrics:{adx:adxV,rvol:rv,atrPct,bodyAtr,dist20,mtf15:mtf.m15,mtf1h:mtf.h1}}
+  return {score,label,signal,breakdown,blockers,confirmations,profile:cfg.name,thresholds:cfg,metrics:{adx:adxV,rvol:rv,atrPct,bodyAtr,dist20,mtf15:mtf.m15,mtf1h:mtf.h1}}
 }
 function commonDecision(legacy,advanced){
   let decision="BEKLE",note="V7 filtreleri işlem teyidi vermedi.";
   const opp=legacy.signal!=="BEKLE"&&advanced.signal!=="BEKLE"&&legacy.signal!==advanced.signal;
   if(opp){note="7'li sistem ile V7 ters yönde; işlem iptal."}
   else if(advanced.signal==="LONG"&&legacy.signal!=="SHORT"){
-    decision=advanced.score>=84?"GÜÇLÜ LONG":"LONG";
+    decision=advanced.score>=advanced.thresholds.strongLong?"GÜÇLÜ LONG":"LONG";
     note=legacy.signal==="LONG"?"V7 + 7'li sistem LONG uyumlu.":"V7 LONG; 7'li sistem karşı değil.";
   }else if(advanced.signal==="SHORT"&&legacy.signal!=="LONG"){
-    decision=advanced.score<=16?"GÜÇLÜ SHORT":"SHORT";
+    decision=advanced.score<=advanced.thresholds.strongShort?"GÜÇLÜ SHORT":"SHORT";
     note=legacy.signal==="SHORT"?"V7 + 7'li sistem SHORT uyumlu.":"V7 SHORT; 7'li sistem karşı değil.";
   }else if(advanced.blockers?.length){note="BEKLE • "+advanced.blockers.slice(0,2).join(" • ")}
   const confidence=decision==="BEKLE"?Math.round(clamp(50+Math.abs(advanced.score-50)*.45,50,70)):Math.round(clamp(60+Math.abs(advanced.score-50)*.8+advanced.confirmations*2,65,94));
@@ -186,7 +196,7 @@ async function getJson(url){
 
 export default async function handler(req,res){
   try{
-    const base="https://fapi.binance.com";
+    const base="https://fapi.binance.com",profile=getProfile(req.query.profile).name,cfg=getProfile(profile);
     const [exchange,tickers]=await Promise.all([
       getJson(`${base}/fapi/v1/exchangeInfo`),
       getJson(`${base}/fapi/v1/ticker/24hr`)
@@ -200,7 +210,7 @@ export default async function handler(req,res){
         try{
           const k=await getJson(`${base}/fapi/v1/klines?symbol=${encodeURIComponent(t.symbol)}&interval=5m&limit=240`);
           const u=unpack(k,true),d=calcAll(u.o,u.h,u.l,u.c,u.v),n=u.c.length-1;
-          const rough=optimizedAt(d,u.o,u.h,u.l,u.c,u.v,n,{m15:0,h1:0});
+          const rough=optimizedAt(d,u.o,u.h,u.l,u.c,u.v,n,{m15:0,h1:0},profile);
           return {symbol:t.symbol,k,u,d,n,rough,quoteVolume:+t.quoteVolume};
         }catch(e){return null}
       }));
@@ -217,10 +227,10 @@ export default async function handler(req,res){
             getJson(`${base}/fapi/v1/klines?symbol=${x.symbol}&interval=1h&limit=220`)
           ]);
           const mtf={m15:tfBiasFromKlines(k15),h1:tfBiasFromKlines(k1h)};
-          const z=optimizedAt(x.d,x.u.o,x.u.h,x.u.l,x.u.c,x.u.v,x.n,mtf);
+          const z=optimizedAt(x.d,x.u.o,x.u.h,x.u.l,x.u.c,x.u.v,x.n,mtf,profile);
           if(z.signal==="BEKLE")return null;
           const direction=z.signal,shock=z.metrics.atrPct>3.2||z.metrics.bodyAtr>2.1;
-          const qualityPass=!shock&&!z.blockers.length&&z.confirmations>=3&&((direction==="LONG"&&z.score>=72)||(direction==="SHORT"&&z.score<=28));
+          const qualityPass=!shock&&!z.blockers.length&&z.confirmations>=cfg.minConf&&((direction==="LONG"&&z.score>=cfg.candidateLong)||(direction==="SHORT"&&z.score<=cfg.candidateShort));
           return {symbol:x.symbol,direction,score:z.score,price:x.u.c[x.n],reason:z.breakdown.slice(0,3).map(a=>a.text).join(" • "),adx:z.metrics.adx,rvol:z.metrics.rvol,atrPct:z.metrics.atrPct,shock,qualityPass,confirmations:z.confirmations};
         }catch(e){return null}
       }));
@@ -229,12 +239,12 @@ export default async function handler(req,res){
     const btc=baseRows.find(x=>x.symbol==="BTCUSDT"),eth=baseRows.find(x=>x.symbol==="ETHUSDT");
     const dir=s=>s>=65?"LONG":s<=35?"SHORT":"NEUTRAL";
     const btcScore=btc?.rough.score??50,ethScore=eth?.rough.score??50;
-    const strongLong=final.filter(x=>x.direction==="LONG"&&x.score>=84).sort((a,b)=>b.score-a.score).slice(0,8);
-    const strongShort=final.filter(x=>x.direction==="SHORT"&&x.score<=16).sort((a,b)=>a.score-b.score).slice(0,8);
+    const strongLong=final.filter(x=>x.direction==="LONG"&&x.score>=cfg.strongLong).sort((a,b)=>b.score-a.score).slice(0,8);
+    const strongShort=final.filter(x=>x.direction==="SHORT"&&x.score<=cfg.strongShort).sort((a,b)=>a.score-b.score).slice(0,8);
     res.setHeader("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");
     return res.status(200).json({
       scanned:baseRows.length,btcScore,btcDirection:dir(btcScore),ethScore,ethDirection:dir(ethScore),
-      strongLong,strongShort,timestamp:new Date().toISOString(),engine:"V7"
+      strongLong,strongShort,timestamp:new Date().toISOString(),engine:"V7.1",profile
     });
   }catch(e){return res.status(500).json({error:e?.message||"Tarama hatası."})}
 }
