@@ -899,17 +899,19 @@ function renderFav(){
 }
 async function loadSymbols(){
   if(currentExchange()==="margex"){symbols=MARGEX_PAIRS.map(x=>({symbol:x.symbol,baseAsset:x.base}));return}
-  const url=currentExchange()==="binancetr"?"/api/binance-tr-symbols":"/api/symbols";
-  try{
-    let r=await fetch(url,{cache:"no-store"});
-    let d=await safeReadResponse(r,currentExchange()==="binancetr"?"Binance TR parite servisi":"Parite servisi");
-    symbols=d.symbols||[];
-    if(currentExchange()==="binancetr"&&!symbols.length)throw Error("TRY paritesi bulunamadı");
-  }catch(e){
-    symbols=[];
-    const st=document.getElementById("status");
-    if(st&&currentExchange()==="binancetr")st.textContent="Binance TR pariteleri okunamadı: "+e.message;
+  if(currentExchange()==="binancetr"){
+    symbols=[
+      "BTCTRY","ETHTRY","SOLTRY","XRPTRY","BNBTRY","DOGETRY","ADATRY","AVAXTRY",
+      "LINKTRY","LTCTRY","DOTTRY","TRXTRY","NEARTRY","ATOMTRY","UNITRY","AAVETRY",
+      "ARBTRY","OPTRY"
+    ].map(symbol=>({symbol,baseAsset:symbol.slice(0,-3)}));
+    return;
   }
+  try{
+    let r=await fetch("/api/symbols",{cache:"no-store"});
+    let d=await safeReadResponse(r,"Parite servisi");
+    symbols=d.symbols||[];
+  }catch(e){symbols=[]}
 }
 function showList(){let q=$("symbol").value.toUpperCase(),m=symbols.filter(x=>x.symbol.includes(q)||x.baseAsset.includes(q)).slice(0,100);$("list").innerHTML=m.map(x=>`<div class="item" data-s="${x.symbol}">${x.symbol}</div>`).join("");$("list").classList.add("open");document.querySelectorAll(".item").forEach(x=>x.onclick=()=>{$("symbol").value=x.dataset.s;$("list").classList.remove("open");updateExchangeUI()})}
 $("symbol").oninput=e=>{e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"");showList();updateExchangeUI()};$("symbol").onfocus=showList;document.addEventListener("click",e=>{if(!e.target.closest(".picker"))$("list").classList.remove("open")});
@@ -1045,25 +1047,16 @@ async function safeReadResponse(response,label="Sunucu"){
 async function fetchBinanceTrKlinesDirect(symbol,interval,limit=320){
   const clean=String(symbol||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
   const tf=String(interval||"5m");
-  const url=`https://api.binance.me/api/v1/klines?symbol=${encodeURIComponent(clean)}&interval=${encodeURIComponent(tf)}&limit=${Math.min(1000,Number(limit)||320)}`;
+  const url=`/api/binance-tr-proxy?symbol=${encodeURIComponent(clean)}&interval=${encodeURIComponent(tf)}&limit=${Math.min(1000,Number(limit)||320)}&t=${Date.now()}`;
   let r;
   try{
-    r=await fetch(url,{method:"GET",mode:"cors",cache:"no-store",credentials:"omit"});
+    r=await fetch(url,{cache:"no-store"});
   }catch(e){
-    throw Error(`Binance TR bağlantı hatası (${clean} ${tf}) • ${e.message}`);
+    throw Error(`Binance TR proxy bağlantı hatası • ${e.message}`);
   }
-  let text="";
-  try{text=await r.text()}catch(e){
-    throw Error(`Binance TR cevap okunamadı (${clean} ${tf}) • HTTP ${r.status||0} • ${e.message}`);
-  }
-  if(!text)throw Error(`Binance TR boş cevap (${clean} ${tf}) • HTTP ${r.status||0}`);
-  let j;
-  try{j=JSON.parse(text)}catch(e){
-    throw Error(`Binance TR JSON hatası (${clean} ${tf}) • HTTP ${r.status||0} • ${text.replace(/\s+/g," ").slice(0,100)}`);
-  }
-  if(!r.ok)throw Error(`Binance TR veri HTTP ${r.status} (${clean} ${tf})`);
-  const data=j&&typeof j==="object"&&"data" in j?j.data:j;
-  if(!Array.isArray(data)||!data.length)throw Error(`Binance TR mum verisi boş (${clean} ${tf})`);
+  const d=await safeReadResponse(r,"Binance TR proxy");
+  const data=d?.data;
+  if(!Array.isArray(data)||!data.length)throw Error(`Binance TR proxy boş veri (${clean} ${tf})`);
   return data;
 }
 async function getBinanceTrBundle(symbol,interval,limit=320){
