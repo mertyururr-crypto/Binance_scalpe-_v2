@@ -180,15 +180,54 @@ function commonDecision(legacy,advanced){
   const confidence=decision==="BEKLE"?Math.round(clamp(50+Math.abs(advanced.score-50)*.45,50,70)):Math.round(clamp(60+Math.abs(advanced.score-50)*.8+advanced.confirmations*2,65,94));
   return {decision,confidence,note}
 }
-function smartLevels(d,h,l,c,n,decision){
-  const price=c[n],a=d.atrV[n]||price*.005,e20=d.e20[n],res=Math.max(...h.slice(n-20,n)),sup=Math.min(...l.slice(n-20,n));
+function smartLevels(d,h,l,c,n,decision,currentPrice=null){
+  const signalPrice=c[n];
+  const market=Number.isFinite(+currentPrice)&&+currentPrice>0?+currentPrice:signalPrice;
+  const a=d.atrV[n]||market*.005,e20=d.e20[n];
+  const res=Math.max(...h.slice(n-20,n)),sup=Math.min(...l.slice(n-20,n));
   const side=decision.includes("LONG")?"LONG":decision.includes("SHORT")?"SHORT":"NONE";
   if(side==="NONE")return {entry:null,entryLow:null,entryHigh:null,stop:null,tp1:null,tp2:null,reason:"V7 işlem teyidi yok"};
-  let entry,reason;
-  if(side==="LONG"){const br=price>res;entry=Math.min(price,br?res+.05*a:e20);reason=br?"Kırılan direncin retesti":"EMA20 geri çekilme bölgesi"}
-  else {const br=price<sup;entry=Math.max(price,br?sup-.05*a:e20);reason=br?"Kırılan desteğin retesti":"EMA20 tepki bölgesi"}
-  const stop=side==="LONG"?entry-1.15*a:entry+1.15*a,tp1=side==="LONG"?entry+1.55*a:entry-1.55*a,tp2=side==="LONG"?entry+2.45*a:entry-2.45*a;
-  return {entry,entryLow:entry-.10*a,entryHigh:entry+.10*a,stop,tp1,tp2,reason}
+
+  const strong=decision.includes("GÜÇLÜ");
+  const maxDistance=(strong?.28:.45)*a;
+  const zoneHalf=(strong?.07:.09)*a;
+  let raw,entry,reason;
+
+  if(side==="LONG"){
+    const breakout=signalPrice>res;
+    raw=breakout?res+.05*a:e20;
+    // Scalp sinyalini çok aşağıda bekletme: güncel fiyatın en fazla 0.28–0.45 ATR altı.
+    entry=Math.max(raw,market-maxDistance);
+    entry=Math.min(entry,market+.05*a);
+    reason=breakout
+      ?"Dinamik kırılım girişi • güncel fiyata yakın retest"
+      :"Dinamik geri çekilme • EMA20 hedefi güncel fiyata yaklaştırıldı";
+  }else{
+    const breakdown=signalPrice<sup;
+    raw=breakdown?sup-.05*a:e20;
+    // SHORT için aynı mantığın simetriği.
+    entry=Math.min(raw,market+maxDistance);
+    entry=Math.max(entry,market-.05*a);
+    reason=breakdown
+      ?"Dinamik kırılım girişi • güncel fiyata yakın retest"
+      :"Dinamik tepki girişi • EMA20 hedefi güncel fiyata yaklaştırıldı";
+  }
+
+  const stop=side==="LONG"?entry-1.15*a:entry+1.15*a;
+  const tp1=side==="LONG"?entry+1.55*a:entry-1.55*a;
+  const tp2=side==="LONG"?entry+2.45*a:entry-2.45*a;
+  const distanceAtr=Math.abs(market-entry)/a;
+
+  return {
+    entry,
+    entryLow:entry-zoneHalf,
+    entryHigh:entry+zoneHalf,
+    stop,tp1,tp2,
+    reason,
+    marketPrice:market,
+    distanceAtr:+distanceAtr.toFixed(2),
+    maxWaitBars:3
+  }
 }
 async function getJson(url){
   const r=await fetch(url);if(!r.ok)throw new Error("Binance veri hatası");return r.json()
@@ -217,12 +256,14 @@ export default async function handler(req,res){
       if(advanced.score>=Math.min(92,advanced.thresholds.strongLong+4)){levelDecision="GÜÇLÜ LONG";source="V7 ÇOK GÜÇLÜ ADAY"}
       else if(advanced.score<=Math.max(8,advanced.thresholds.strongShort-4)){levelDecision="GÜÇLÜ SHORT";source="V7 ÇOK GÜÇLÜ ADAY"}
     }
-    const levels=smartLevels(d,u.h,u.l,u.c,n,levelDecision);levels.source=levels.entry==null?"SEVİYE YOK":source;
+    const livePrice=Number(ticker.lastPrice)||u.c[n];
+    const levels=smartLevels(d,u.h,u.l,u.c,n,levelDecision,livePrice);
+    levels.source=levels.entry==null?"SEVİYE YOK":source;
     res.setHeader("Cache-Control","no-store");
     return res.status(200).json({
-      symbol,interval,price:u.c[n],change24:+ticker.priceChangePercent,
+      symbol,interval,price:livePrice,signalClose:u.c[n],change24:+ticker.priceChangePercent,
       legacy,advanced,common,levels,
-      v7:{version:"7.1",profile,thresholds:advanced.thresholds,mtf,blockers:advanced.blockers,confirmations:advanced.confirmations,metrics:advanced.metrics},
+      v7:{version:"7.2",profile,thresholds:advanced.thresholds,mtf,blockers:advanced.blockers,confirmations:advanced.confirmations,metrics:advanced.metrics},
       timestamp:new Date().toISOString()
     });
   }catch(e){return res.status(500).json({error:e?.message||"Analiz hatası."})}
