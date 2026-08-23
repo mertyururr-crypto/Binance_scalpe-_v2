@@ -29,8 +29,10 @@ async function trKlines(symbol,interval,limit=320){
   throw lastErr||new Error("Binance TR mum verisi alınamadı");
 }
 async function trSymbolsRaw(){
-  const x=unwrapTr(await trFetchJson(`${TR_GENERAL}/open/v1/common/symbols`));
+  const raw=await trFetchJson(`${TR_GENERAL}/open/v1/common/symbols`);
+  const x=unwrapTr(raw);
   const list=Array.isArray(x?.list)?x.list:Array.isArray(x)?x:[];
+  if(!list.length)throw new Error("Binance TR parite cevabı boş.");
   return list;
 }
 
@@ -38,20 +40,24 @@ export default async function handler(req,res){
   try{
     const raw=await trSymbolsRaw();
     const symbols=raw
-      .filter(x=>String(x.quoteAsset||"").toUpperCase()==="TRY" && Number(x.spotTradingEnable??1)===1)
+      .filter(x=>String(x?.quoteAsset||"").toUpperCase()==="TRY")
       .map(x=>{
-        const rawSymbol=String(x.symbol||"").toUpperCase();
+        const rawSymbol=String(x?.symbol||"").toUpperCase();
         const symbol=rawSymbol.replace(/_/g,"");
         return {
           symbol,
           rawSymbol,
-          baseAsset:String(x.baseAsset||"").toUpperCase(),
-          quoteAsset:"TRY",
-          symbolType:Number(x.type||1)
+          baseAsset:String(x?.baseAsset||"").toUpperCase(),
+          quoteAsset:String(x?.quoteAsset||"TRY").toUpperCase(),
+          symbolType:Number(x?.type||1),
+          basePrecision:Number(x?.basePrecision??0),
+          quotePrecision:Number(x?.quotePrecision??0),
+          filters:Array.isArray(x?.filters)?x.filters:[]
         };
       })
       .filter(x=>x.symbol&&x.baseAsset)
       .sort((a,b)=>a.baseAsset.localeCompare(b.baseAsset));
+    if(!symbols.length)throw new Error("Binance TR cevabı geldi ancak TRY paritesi bulunamadı.");
     res.setHeader("Cache-Control","s-maxage=300, stale-while-revalidate=600");
     return res.status(200).json({exchange:"binancetr",quoteAsset:"TRY",symbols,count:symbols.length,timestamp:new Date().toISOString()});
   }catch(e){return res.status(500).json({error:e?.message||"Binance TR parite listesi alınamadı."})}

@@ -267,8 +267,10 @@ async function trKlines(symbol,interval,limit=320){
   throw lastErr||new Error("Binance TR mum verisi alınamadı");
 }
 async function trSymbolsRaw(){
-  const x=unwrapTr(await trFetchJson(`${TR_GENERAL}/open/v1/common/symbols`));
+  const raw=await trFetchJson(`${TR_GENERAL}/open/v1/common/symbols`);
+  const x=unwrapTr(raw);
   const list=Array.isArray(x?.list)?x.list:Array.isArray(x)?x:[];
+  if(!list.length)throw new Error("Binance TR parite cevabı boş.");
   return list;
 }
 
@@ -278,8 +280,13 @@ export default async function handler(req,res){
   try{
     const profile=getProfile(req.query.profile).name,cfg=getProfile(profile);
     const raw=await trSymbolsRaw();
-    const all=raw.filter(x=>String(x.quoteAsset||"").toUpperCase()==="TRY"&&Number(x.spotTradingEnable??1)===1)
-      .map(x=>({symbol:String(x.symbol||"").replace(/_/g,"").toUpperCase(),base:String(x.baseAsset||"").toUpperCase()}))
+    const all=raw.filter(x=>String(x?.quoteAsset||"").toUpperCase()==="TRY")
+      .map(x=>({
+        symbol:String(x?.symbol||"").replace(/_/g,"").toUpperCase(),
+        rawSymbol:String(x?.symbol||"").toUpperCase(),
+        base:String(x?.baseAsset||"").toUpperCase(),
+        symbolType:Number(x?.type||1)
+      }))
       .filter(x=>x.symbol&&x.base);
     const byBase=new Map(all.map(x=>[x.base,x]));
     const selected=[];

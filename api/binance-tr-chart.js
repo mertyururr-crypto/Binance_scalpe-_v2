@@ -29,8 +29,10 @@ async function trKlines(symbol,interval,limit=320){
   throw lastErr||new Error("Binance TR mum verisi alınamadı");
 }
 async function trSymbolsRaw(){
-  const x=unwrapTr(await trFetchJson(`${TR_GENERAL}/open/v1/common/symbols`));
+  const raw=await trFetchJson(`${TR_GENERAL}/open/v1/common/symbols`);
+  const x=unwrapTr(raw);
   const list=Array.isArray(x?.list)?x.list:Array.isArray(x)?x:[];
+  if(!list.length)throw new Error("Binance TR parite cevabı boş.");
   return list;
 }
 
