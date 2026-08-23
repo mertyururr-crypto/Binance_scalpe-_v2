@@ -596,6 +596,7 @@ body.margex-mode .exchange-warning{display:block}
     <select id="exchangeSelect" class="exchange-select" aria-label="Borsa seçimi">
       <option value="binance">Binance Futures</option>
       <option value="margex">Margex</option>
+      <option value="binancetr">Binance TR — Spot</option>
     </select>
     <div>
       <div id="exchangeInfo" class="exchange-info">
@@ -824,14 +825,17 @@ const MARGEX_PAIRS=[
   {symbol:"ZKUSD",base:"ZK",maxLev:25,ref:"ZKUSDT"}
 ];
 const MARGEX_FAV=["BTCUSD","ETHUSD","SOLUSD","DOGEUSD","ADAUSD","LINKUSD"];
-function currentExchange(){return appSettings.selectedExchange==="margex"?"margex":"binance"}
+function currentExchange(){
+  const x=String(appSettings.selectedExchange||"binance");
+  return ["binance","margex","binancetr"].includes(x)?x:"binance";
+}
 function margexPair(sym){return MARGEX_PAIRS.find(x=>x.symbol===String(sym).toUpperCase())||null}
 function analysisSymbol(displaySymbol){
   if(currentExchange()==="margex"){
     const p=margexPair(displaySymbol);
     return p?.ref||null;
   }
-  return String(displaySymbol).toUpperCase();
+  return String(displaySymbol).toUpperCase().replace(/[^A-Z0-9]/g,"");
 }
 function displayScale(displaySymbol){return currentExchange()==="margex"?(margexPair(displaySymbol)?.scale||1):1}
 function applyDisplayScale(d,displaySymbol){
@@ -857,35 +861,46 @@ function updateExchangeUI(){
       <span class="exchange-pill"><strong>Maker:</strong> 0.019%</span>
       <span class="exchange-pill"><strong>Kaldıraç:</strong> ${p?`5x–${p.maxLev}x`:"parite seç"}</span>
       <span class="exchange-pill"><strong>Sinyal verisi:</strong> Binance referans</span>`;
+  }else if(ex==="binancetr"){
+    info.innerHTML=`<span class="exchange-pill"><strong>Borsa:</strong> Binance TR</span>
+      <span class="exchange-pill"><strong>Piyasa:</strong> SPOT</span>
+      <span class="exchange-pill"><strong>Para:</strong> TRY</span>
+      <span class="exchange-pill"><strong>Veri:</strong> Binance TR resmi API</span>`;
   }else{
     info.innerHTML=`<span class="exchange-pill"><strong>Borsa:</strong> Binance Futures</span>
       <span class="exchange-pill"><strong>Sinyal verisi:</strong> Binance Futures</span>`;
   }
 }
 function setExchange(ex){
-  appSettings.selectedExchange=ex==="margex"?"margex":"binance";
+  appSettings.selectedExchange=["binance","margex","binancetr"].includes(ex)?ex:"binance";
   saveJSON("bsa_settings",appSettings);
   if(appSettings.selectedExchange==="margex"){
     symbols=MARGEX_PAIRS.map(x=>({symbol:x.symbol,baseAsset:x.base}));
     $("symbol").value="BTCUSD";
+  }else if(appSettings.selectedExchange==="binancetr"){
+    symbols=[];
+    $("symbol").value="BTCTRY";
+    loadSymbols();
   }else{
     $("symbol").value="BTCUSDT";
     loadSymbols();
   }
   renderFav();
   updateExchangeUI();
+  if(typeof runScanner==="function")runScanner();
 }
 
 let fav=loadJSON("bsa_favorites",DEFAULT_FAV);
 function fmt(n){if(n==null||!Number.isFinite(Number(n)))return"—";n=Number(n);return n<1?n.toLocaleString("tr-TR",{maximumFractionDigits:8}):n.toLocaleString("tr-TR",{maximumFractionDigits:5})}
 function renderFav(){
-  const list=currentExchange()==="margex"?MARGEX_FAV:fav;
+  const list=currentExchange()==="margex"?MARGEX_FAV:currentExchange()==="binancetr"?["BTCTRY","ETHTRY","SOLTRY","XRPTRY","BNBTRY","DOGETRY"]:fav;
   $("favorites").innerHTML=list.map(s=>`<button class="fav" data-s="${s}">${s}</button>`).join("");
   document.querySelectorAll(".fav").forEach(b=>b.onclick=()=>{$("symbol").value=b.dataset.s;$("list").classList.remove("open");updateExchangeUI()});
 }
 async function loadSymbols(){
   if(currentExchange()==="margex"){symbols=MARGEX_PAIRS.map(x=>({symbol:x.symbol,baseAsset:x.base}));return}
-  try{let r=await fetch("/api/symbols"),d=await r.json();symbols=d.symbols||[]}catch(e){}
+  const url=currentExchange()==="binancetr"?"/api/binance-tr-symbols":"/api/symbols";
+  try{let r=await fetch(url,{cache:"no-store"}),d=await r.json();symbols=d.symbols||[]}catch(e){symbols=[]}
 }
 function showList(){let q=$("symbol").value.toUpperCase(),m=symbols.filter(x=>x.symbol.includes(q)||x.baseAsset.includes(q)).slice(0,100);$("list").innerHTML=m.map(x=>`<div class="item" data-s="${x.symbol}">${x.symbol}</div>`).join("");$("list").classList.add("open");document.querySelectorAll(".item").forEach(x=>x.onclick=()=>{$("symbol").value=x.dataset.s;$("list").classList.remove("open");updateExchangeUI()})}
 $("symbol").oninput=e=>{e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"");showList();updateExchangeUI()};$("symbol").onfocus=showList;document.addEventListener("click",e=>{if(!e.target.closest(".picker"))$("list").classList.remove("open")});
@@ -1066,14 +1081,20 @@ async function analyze(){
  let symbol=analysisSymbol(displaySymbol);
  if(!symbol){$("status").textContent="Bu Margex paritesi için referans veri eşlemesi yok.";return}
  $("status").textContent="Analiz ediliyor...";
- try{let r=await fetch(`/api/analyze?symbol=${symbol}&interval=${interval}${profileParam()}`),d=await r.json();if(!r.ok)throw Error(d.error);
+ try{
+ const analyzeEndpoint=currentExchange()==="binancetr"?"/api/binance-tr-analyze":"/api/analyze";
+ let r=await fetch(`${analyzeEndpoint}?symbol=${symbol}&interval=${interval}${profileParam()}`,{cache:"no-store"}),d=await r.json();if(!r.ok)throw Error(d.error);
  d=applyDisplayScale(d,displaySymbol);
  d.displaySymbol=displaySymbol;
  d.exchange=currentExchange();
  setDecision(d.common.decision);
- const dirText=d.common.decision.includes("LONG")?"Yukarı yön daha güçlü. Belirlenen giriş bölgesini bekle.":
-               d.common.decision.includes("SHORT")?"Aşağı yön daha güçlü. Belirlenen giriş bölgesini bekle.":
-               "Yön yeterince net değil. Yeni işlem açmak için acele etme.";
+ const dirText=currentExchange()==="binancetr"
+   ? (d.common.decision.includes("LONG")?"AL fırsatı: yukarı yön daha güçlü. Giriş bölgesini bekle.":
+      d.common.decision.includes("SHORT")?"SAT sinyali: elinde coin varsa azalt/sat düşünülebilir. Coin yoksa short açılmaz.":
+      "BEKLE: Binance TR spotta yeni alım için yön yeterince net değil.")
+   : (d.common.decision.includes("LONG")?"Yukarı yön daha güçlü. Belirlenen giriş bölgesini bekle.":
+      d.common.decision.includes("SHORT")?"Aşağı yön daha güçlü. Belirlenen giriş bölgesini bekle.":
+      "Yön yeterince net değil. Yeni işlem açmak için acele etme.");
  $("note").textContent=dirText;
  $("commonConf").textContent=d.common.confidence+"%";
  $("legacySig").textContent=d.legacy.signal;$("longScore").textContent=d.legacy.longScore+"/7";$("shortScore").textContent=d.legacy.shortScore+"/7";$("legacyConf").textContent=d.legacy.confidence+"%";
@@ -1085,11 +1106,22 @@ async function analyze(){
    : "Şu anda güvenli bir giriş bölgesi oluşmadı.";
  updateDecisionExtras(d);
  updateEasyUI(d);
- await loadMarketContext(d.symbol,d.common?.decision!=="BEKLE"?d.common?.decision:d.advanced?.signal);
+ if(currentExchange()==="binancetr"){
+   marketContext=null;
+   $("ctx15").textContent="15m • Binance TR";
+   $("ctx1h").textContent="1h • Binance TR";
+   $("ctxFunding").textContent="Funding • Spotta yok";
+   $("ctxOI").textContent="Open Interest • Spotta yok";
+   $("marketConfirm").textContent="Binance TR Spot • kendi piyasa verisi";
+ }else{
+   await loadMarketContext(d.symbol,d.common?.decision!=="BEKLE"?d.common?.decision:d.advanced?.signal);
+ }
  $("reasons").innerHTML=d.legacy.reasons.map(x=>`<div class="row"><span>${x.label}</span><span class="${x.bias>0?"pos":x.bias<0?"neg":"neu"}">${x.text}</span></div>`).join("");
  $("status").textContent=currentExchange()==="margex"
    ? `${displaySymbol} • Margex parametreleri • Referans veri: Binance Futures (${symbol}) • ${d.interval} • Anlık referans ${fmt(d.price)}`
-   : `${d.symbol} • ${d.interval} • V7.1 ${String(d.v7?.profile||activeSignalProfile()).toUpperCase()} • Anlık fiyat ${fmt(d.price)} • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")}`;
+   : currentExchange()==="binancetr"
+   ? `${displaySymbol} • Binance TR SPOT • Kendi TRY verisi • ${d.interval} • ${fmt(d.price)} TL`
+   : `${d.symbol} • ${d.interval} • V7.4 ${String(d.v7?.profile||activeSignalProfile()).toUpperCase()} • Anlık fiyat ${fmt(d.price)} • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")}`;
  latestAnalysis=d;
  saveAnalysisRecord(d);
  saveSignalRecord(d);
@@ -1101,7 +1133,9 @@ async function backtest(){
  let displaySymbol=$("symbol").value,interval=$("interval").value,symbol=analysisSymbol(displaySymbol);
  if(!symbol){$("btStatus").textContent="Bu Margex paritesi için referans veri eşlemesi yok.";return}
  $("btStatus").textContent="Backtest çalışıyor...";
- try{let r=await fetch(`/api/backtest?symbol=${symbol}&interval=${interval}&limit=1000${profileParam()}`),d=await r.json();if(!r.ok)throw Error(d.error);
+ try{
+ const btEndpoint=currentExchange()==="binancetr"?"/api/binance-tr-backtest":"/api/backtest";
+ let r=await fetch(`${btEndpoint}?symbol=${symbol}&interval=${interval}&limit=1000${profileParam()}`,{cache:"no-store"}),d=await r.json();if(!r.ok)throw Error(d.error);
  $("btResults").innerHTML=btCard("7'li Sistem",d.legacy)+btCard("100 Puan",d.advanced)+btCard("Ortak Karar",d.common);
  $("btStatus").textContent=`${d.symbol} • ${d.interval} • ${d.candles} mum test edildi.`;
  $("btMethod").textContent=d.methodology;
@@ -1120,6 +1154,9 @@ $("exchangeSelect").addEventListener("change",e=>setExchange(e.target.value));
 if(currentExchange()==="margex"){
   symbols=MARGEX_PAIRS.map(x=>({symbol:x.symbol,baseAsset:x.base}));
   if(!$("symbol").value.endsWith("USD"))$("symbol").value="BTCUSD";
+}else if(currentExchange()==="binancetr"){
+  $("symbol").value="BTCTRY";
+  loadSymbols();
 }else{
   loadSymbols();
 }
@@ -1259,12 +1296,15 @@ async function runScanner(){
   btn.disabled=true;
   $("scanMeta").textContent="Yeni piyasa taraması yapılıyor...";
   try{
-    const r=await fetch(`/api/scan?t=${Date.now()}${profileParam()}`,{cache:"no-store"});
+    const scanEndpoint=currentExchange()==="binancetr"?"/api/binance-tr-scan":"/api/scan";
+    const r=await fetch(`${scanEndpoint}?t=${Date.now()}${profileParam()}`,{cache:"no-store"});
     const d=await r.json();
     if(!r.ok)throw Error(d.error||"Tarama başarısız");
     scanData={strongLong:d.strongLong||[],strongShort:d.strongShort||[],btcDirection:d.btcDirection||"NEUTRAL",btcScore:d.btcScore??50};
     renderScanResults();
-    $("scanMeta").textContent=`${d.scanned} likit parite • BTC ${d.btcDirection||"NEUTRAL"} ${d.btcScore??50}/100 • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")} • ${appSettings.scanSeconds} sn`;
+    $("scanMeta").textContent=currentExchange()==="binancetr"
+      ? `${d.scanned} Binance TR TRY paritesi • SPOT • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")} • ${appSettings.scanSeconds} sn`
+      : `${d.scanned} likit parite • BTC ${d.btcDirection||"NEUTRAL"} ${d.btcScore??50}/100 • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")} • ${appSettings.scanSeconds} sn`;
     processScannerNotifications(d);
   }catch(e){
     $("scanMeta").textContent="Tarama hatası: "+e.message;
@@ -1893,7 +1933,7 @@ async function drawSelectedChart(){
 
     stage="mum verisi";
     status.textContent=`${symbol} mum verisi alınıyor...`;
-    const chartUrl="/api/chart?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval)+"&limit=300";
+    const chartUrl=(currentExchange()==="binancetr"?"/api/binance-tr-chart":"/api/chart")+"?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval)+"&limit=300";
     const kr=await fetch(chartUrl,{method:"GET",headers:{"Accept":"application/json"}});
     const kd=await kr.json();
     if(!kr.ok) throw new Error(kd.error||"Grafik verisi alınamadı.");
@@ -1902,7 +1942,7 @@ async function drawSelectedChart(){
     stage="analiz seviyeleri";
     let ad=null;
     try{
-      const analyzeUrl="/api/analyze?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval)+profileParam();
+      const analyzeUrl=(currentExchange()==="binancetr"?"/api/binance-tr-analyze":"/api/analyze")+"?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval)+profileParam();
       const ar=await fetch(analyzeUrl,{method:"GET",headers:{"Accept":"application/json"}});
       const tmp=await ar.json();
       if(ar.ok) ad=tmp;
