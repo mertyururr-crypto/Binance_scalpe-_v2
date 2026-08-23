@@ -427,6 +427,101 @@ button.secondary{background:#2b333d;color:#fff}
 .market-confirm{margin-top:8px;padding:9px 10px;border:1px solid var(--border);border-radius:11px;font-size:11px;line-height:1.45}
 @media(min-width:600px){.market-context{grid-template-columns:repeat(4,minmax(0,1fr))}.paper-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 
+
+/* Beginner / Easy Mode */
+.easy-hero{padding:16px}
+.easy-title{font-size:23px;font-weight:950;margin:0}
+.easy-sub{font-size:13px;color:var(--muted);margin-top:5px;line-height:1.45}
+.easy-controls{display:grid;grid-template-columns:minmax(0,1fr) 92px;gap:9px;margin-top:14px}
+.easy-controls .primary-action{grid-column:1/-1;min-height:52px;font-size:16px}
+.easy-controls .advanced-action{display:none}
+.easy-decision{text-align:center;padding:18px 14px}
+.easy-decision .k{text-align:center}
+.easy-word{font-size:52px;font-weight:950;line-height:1;margin-top:7px}
+.easy-strength{display:inline-flex;margin-top:10px;padding:7px 11px;border-radius:999px;border:1px solid var(--border);font-size:11px;font-weight:900}
+.easy-message{margin-top:10px;font-size:13px;line-height:1.5;color:var(--muted)}
+.easy-plan{padding:14px}
+.easy-plan-title{font-size:15px;font-weight:950;margin-bottom:9px}
+.easy-plan-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.easy-plan .metric{padding:11px}
+.easy-plan .v{font-size:17px}
+.easy-why{display:grid;gap:7px;margin-top:10px}
+.easy-why-item{display:flex;gap:9px;align-items:flex-start;background:var(--p2);border:1px solid var(--border);border-radius:12px;padding:10px;font-size:12px;line-height:1.4}
+.easy-why-icon{font-size:16px;line-height:1}
+.easy-tip{margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:12px;font-size:11px;color:var(--muted);line-height:1.5}
+.easy-tip strong{color:var(--text)}
+.easy-scan-title{font-size:13px;font-weight:950}
+.easy-advanced-toggle{width:100%;min-height:46px;background:var(--panel);color:var(--muted);border:1px solid var(--border);border-radius:13px;font-size:12px;margin-bottom:12px}
+.pro-panel{display:none}
+body.show-pro .pro-panel{display:block}
+.beginner-hide{display:none!important}
+.market-context.beginner-context{display:none}
+.beginner-status{font-size:11px;color:var(--muted);margin-top:8px;text-align:center}
+.beginner-risk{font-size:11px;color:var(--muted);line-height:1.45;margin-top:8px}
+.beginner-risk.ok{color:var(--green)} .beginner-risk.warn{color:var(--orange)} .beginner-risk.bad{color:var(--red)}
+.menu-section-label{font-size:10px;color:var(--muted);font-weight:900;letter-spacing:.5px;margin:12px 4px 5px}
+@media(min-width:600px){
+  .easy-controls{grid-template-columns:minmax(0,1fr) 110px auto}
+  .easy-controls .primary-action{grid-column:auto;min-width:150px}
+  .easy-plan-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+
+
+/* Simple / Pro mode switch */
+.mode-switch{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:4px;
+  padding:4px;
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:14px;
+  margin-bottom:12px;
+}
+.mode-btn{
+  min-height:40px;
+  border:0;
+  border-radius:10px;
+  background:transparent;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:900;
+  padding:0 10px;
+}
+.mode-btn.active{
+  background:var(--yellow);
+  color:#111;
+}
+.mode-description{
+  font-size:10px;
+  color:var(--muted);
+  text-align:center;
+  margin:-5px 0 10px;
+}
+body:not(.pro-mode) .pro-only{display:none!important}
+body.pro-mode .simple-only{display:none!important}
+body.pro-mode .pro-panel{display:block}
+body.pro-mode .easy-advanced-toggle{display:none}
+body.pro-mode .beginner-hide{display:block!important}
+body.pro-mode .market-context.beginner-context{display:block}
+body.pro-mode .easy-title::after{
+  content:" • PRO";
+  color:var(--yellow);
+  font-size:13px;
+  vertical-align:middle;
+}
+.pro-summary{
+  display:none;
+  margin-bottom:12px;
+  padding:10px 12px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--p2);
+  font-size:11px;
+  color:var(--muted);
+}
+body.pro-mode .pro-summary{display:block}
+
 </style></head>
 <body>
 <div id="menuOverlay" class="menu-overlay" aria-hidden="true">
@@ -437,15 +532,17 @@ button.secondary{background:#2b333d;color:#fff}
     </div>
     <div class="menu-items">
       <button class="menu-item" type="button" data-view="favoritesView"><span>⭐ Favoriler</span><span>›</span></button>
-      <button class="menu-item" type="button" data-view="recentView"><span>🕘 Son Analizler</span><span>›</span></button>
+      <button class="menu-item" type="button" data-view="recentView"><span>🕘 Son Sinyaller</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="notificationsView"><span>🔔 Bildirimler</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="settingsView"><span>⚙️ Ayarlar</span><span>›</span></button>
-      <button class="menu-item" type="button" data-view="chartsView"><span>📊 Grafikler</span><span>›</span></button>
-      <button class="menu-item" type="button" data-view="performanceView"><span>📊 Performans</span><span>›</span></button>
-      <button class="menu-item" type="button" data-view="optimizerView"><span>🧪 V7 Optimizasyon</span><span>›</span></button>
-      <button class="menu-item" type="button" data-view="riskView"><span>🧮 Risk Hesaplayıcı</span><span>›</span></button>
-      <button class="menu-item" type="button" data-view="paperView"><span>🧪 Paper Trading</span><span>›</span></button>
-      <button class="menu-item" type="button" data-view="signalsView"><span>📈 Geçmiş Sinyaller</span><span>›</span></button>
+      <button class="menu-item" type="button" data-view="chartsView"><span>📊 Grafik</span><span>›</span></button>
+      <div class="menu-section-label pro-only">PRO ARAÇLAR</div>
+      <button class="menu-item pro-only" type="button" data-view="performanceView"><span>📈 Ayrıntılı İstatistikler</span><span>›</span></button>
+      <button class="menu-item pro-only" type="button" data-view="optimizerView"><span>🧪 Sinyal Motoru Ayarı</span><span>›</span></button>
+      <button class="menu-item pro-only" type="button" data-view="riskView"><span>🧮 Pozisyon Hesabı</span><span>›</span></button>
+      <button class="menu-item" type="button" data-view="advancedInfoView"><span>🛠️ Gelişmiş Bilgiler</span><span>›</span></button>
+      <button class="menu-item" type="button" data-view="paperView"><span>🎮 Demo İşlem</span><span>›</span></button>
+      <button class="menu-item" type="button" data-view="signalsView"><span>📚 İşlem Geçmişi</span><span>›</span></button>
     </div>
   </aside>
 </div>
@@ -465,48 +562,87 @@ button.secondary{background:#2b333d;color:#fff}
   <div class="app-brand-mini">SCALP ANALYZER</div>
   <button id="menuOpen" class="menu-open" type="button">☰ MENÜ</button>
 </div>
-<div class="card"><h1>Binance Futures Scalp Analyzer</h1><div class="sub">7'li sistem + 100 puan + ortak karar + backtest</div>
-<div class="controls"><div class="picker"><input id="symbol" value="1000PEPEUSDT" placeholder="Parite ara..."><div id="list" class="list"></div></div><select id="interval"><option>1m</option><option>3m</option><option selected>5m</option><option>15m</option><option>1h</option></select><button id="analyze">ANALİZ</button><button id="backtest" class="secondary">BACKTEST</button></div>
-<div id="favorites" class="favorites"></div>
-<div class="scanner">
-  <div class="scanner-head">
-    <button id="scanCollapse" class="collapse-toggle" type="button" aria-expanded="false" style="padding:0;min-height:40px">
-      <div>
-        <div class="scanner-title">CANLI GÜÇLÜ SİNYALLER</div>
-        <div id="scanMeta" class="sub">Piyasa taraması hazırlanıyor...</div>
+<div class="mode-switch" aria-label="Kullanım modu">
+  <button id="simpleModeBtn" class="mode-btn active" type="button">🙂 BASİT MOD</button>
+  <button id="proModeBtn" class="mode-btn" type="button">⚙️ PRO MOD</button>
+</div>
+<div id="modeDescription" class="mode-description">Yeni başlayanlar için sade AL / SAT / BEKLE görünümü</div>
+<div class="card easy-hero">
+  <h1 class="easy-title">Kolay Trade Sinyali</h1>
+  <div class="easy-sub">Pariteyi seç, tek tuşla sonucu gör. Teknik detayları bilmeden AL / SAT / BEKLE kararını ve işlem planını takip edebilirsin.</div>
+  <div class="pro-summary">
+    Pro Mod aktif: V7.1 sinyal motoru, teknik skorlar, çoklu zaman teyidi, backtest ve gelişmiş risk/performans ekranları görünür.
+  </div>
+  <div class="easy-controls">
+    <div class="picker"><input id="symbol" value="1000PEPEUSDT" placeholder="Parite ara..."><div id="list" class="list"></div></div>
+    <select id="interval"><option>1m</option><option>3m</option><option selected>5m</option><option>15m</option><option>1h</option></select>
+    <button id="analyze" class="primary-action">SİNYALİ GÖSTER</button>
+    <button id="backtest" class="secondary advanced-action">BACKTEST</button>
+  </div>
+  <div id="favorites" class="favorites"></div>
+  <div class="scanner">
+    <div class="scanner-head">
+      <button id="scanCollapse" class="collapse-toggle" type="button" aria-expanded="false" style="padding:0;min-height:40px">
+        <div>
+          <div class="easy-scan-title">⚡ HIZLI FIRSATLAR</div>
+          <div id="scanMeta" class="sub">Piyasa taraması hazırlanıyor...</div>
+        </div>
+        <span class="chev">⌄</span>
+      </button>
+      <button id="scanNow" class="scan-btn" type="button">TARA</button>
+    </div>
+    <div id="scanCollapseContent" class="collapse-content" style="padding:0">
+      <div class="scan-filters" role="group" aria-label="Sinyal filtresi">
+        <button type="button" class="scan-filter active" data-filter="ALL">TÜMÜ</button>
+        <button type="button" class="scan-filter" data-filter="LONG">AL</button>
+        <button type="button" class="scan-filter" data-filter="SHORT">SAT</button>
+        <button type="button" class="scan-filter" data-filter="QUALITY">GÜÇLÜ</button>
       </div>
-      <span class="chev">⌄</span>
-    </button>
-    <button id="scanNow" class="scan-btn" type="button">TARA</button>
-  </div>
-  <div id="scanCollapseContent" class="collapse-content" style="padding:0">
-    <div class="scan-filters" role="group" aria-label="Sinyal filtresi">
-      <button type="button" class="scan-filter active" data-filter="ALL">HEPSİ</button>
-      <button type="button" class="scan-filter" data-filter="LONG">LONG</button>
-      <button type="button" class="scan-filter" data-filter="SHORT">SHORT</button>
-      <button type="button" class="scan-filter" data-filter="QUALITY">KALİTELİ</button>
-    </div>
-    <div id="scanResults" class="scan-results">
-      <div class="sub">Güçlü LONG / SHORT adayları burada görünecek.</div>
+      <div id="scanResults" class="scan-results"><div class="sub">Uygun fırsatlar burada görünecek.</div></div>
     </div>
   </div>
+  <div id="status" class="status" style="margin-top:9px">Hazır.</div>
 </div>
-<div id="status" class="status" style="margin-top:9px">Hazır.</div></div>
+<div class="card easy-decision">
+  <div class="k">ŞİMDİ NE YAPMALIYIM?</div>
+  <div id="decision" class="word wait easy-word">BEKLE</div>
+  <div id="easyStrength" class="easy-strength">Sinyal bekleniyor</div>
+  <div id="note" class="easy-message">Pariteyi seçip “SİNYALİ GÖSTER” butonuna bas.</div>
+  <div id="commonConf" class="beginner-hide">—</div>
+  <div id="conflictBox" class="conflict-box"></div>
+  <div id="guardBox" class="guard-box"></div>
+  <div id="marketRegime" class="beginner-hide">—</div>
+  <div id="marketRegimeNote" class="beginner-hide">—</div>
+  <div id="marketConfirm" class="beginner-hide">—</div>
+  <div class="market-context beginner-context">
+    <div><div id="ctx15">—</div><div id="ctx1h">—</div><div id="ctxFunding">—</div><div id="ctxOI">—</div></div>
+  </div>
+</div>
 
-<div class="card"><div class="k">ORTAK KARAR</div><div class="signal"><div><div id="decision" class="word wait">BEKLE</div><div id="note" class="sub">Henüz analiz yapılmadı.</div></div><div><div id="commonConf" class="conf">—</div><div class="sub">ortak güven</div></div></div>
-<div id="conflictBox" class="conflict-box"></div>
-<div class="regime-box"><div class="regime-title">PİYASA REJİMİ</div><div id="marketRegime" class="regime-value">—</div><div id="marketRegimeNote" class="sub">Analiz sonrası belirlenir.</div></div>
-<div id="guardBox" class="guard-box"></div>
-<div id="marketConfirm" class="market-confirm">Çoklu zaman dilimi / Funding / OI teyidi analiz sonrası yüklenir.</div>
-<div class="market-context">
-  <div class="context-card"><div class="k">15m TREND</div><div id="ctx15" class="v">—</div></div>
-  <div class="context-card"><div class="k">1h TREND</div><div id="ctx1h" class="v">—</div></div>
-  <div class="context-card"><div class="k">FUNDING</div><div id="ctxFunding" class="v">—</div></div>
-  <div class="context-card"><div class="k">OPEN INTEREST</div><div id="ctxOI" class="v">—</div></div>
-</div>
+<div class="card easy-plan">
+  <div class="easy-plan-title">📍 İşlem Planı</div>
+  <div class="easy-plan-grid">
+    <div class="metric"><div class="k">AL / SAT BÖLGESİ</div><div id="entryZone" class="v zone">—</div></div>
+    <div class="metric"><div class="k">ZARAR DURDUR</div><div id="stop" class="v">—</div></div>
+    <div class="metric"><div class="k">HEDEF 1</div><div id="tp1" class="v">—</div></div>
+    <div class="metric"><div class="k">HEDEF 2</div><div id="tp2" class="v">—</div></div>
+  </div>
+  <div id="entryReason" class="easy-message">Henüz işlem planı yok.</div>
+  <div id="easyRisk" class="beginner-risk">Stop ve hedefler analiz sonrası otomatik hesaplanır.</div>
+  <div class="rr-grid beginner-hide">
+    <div><div id="rr1">—</div><div id="rr2">—</div><div id="riskPct">—</div><div id="tradeQuality">—</div></div>
+  </div>
 </div>
 
-<div class="card collapsible-card">
+<div class="card">
+  <div class="easy-plan-title">💡 Neden Bu Sinyal?</div>
+  <div id="easyWhy" class="easy-why"><div class="easy-why-item"><span class="easy-why-icon">•</span><span>Analiz yapınca burada kısa ve anlaşılır açıklamalar göreceksin.</span></div></div>
+  <div class="easy-tip"><strong>Yeni başlayan notu:</strong> “AL” veya “SAT” bir garanti değildir. Stop seviyesini kullanmadan işlem açmak riski ciddi şekilde artırır.</div>
+</div>
+
+<button id="togglePro" class="easy-advanced-toggle simple-only" type="button">⚙️ Teknik detaylara hızlı bak</button>
+
+<div class="card collapsible-card pro-panel">
 <button class="collapse-toggle" type="button" aria-expanded="false" data-target="mevcut-7-li-si-stem">
   <span>MEVCUT 7'Lİ SİSTEM</span><span class="chev">⌄</span>
 </button>
@@ -515,7 +651,7 @@ button.secondary{background:#2b333d;color:#fff}
 </div>
 </div>
 
-<div class="card collapsible-card">
+<div class="card collapsible-card pro-panel">
 <button class="collapse-toggle" type="button" aria-expanded="false" data-target="100-puanlik-geli-mi-si-stem">
   <span>100 PUANLIK GELİŞMİŞ SİSTEM</span><span class="chev">⌄</span>
 </button>
@@ -524,22 +660,9 @@ button.secondary{background:#2b333d;color:#fff}
 </div>
 </div>
 
-<div class="card collapsible-card">
-<button class="collapse-toggle" type="button" aria-expanded="false" data-target="i-lem-sevi-yeleri">
-  <span>İŞLEM SEVİYELERİ</span><span class="chev">⌄</span>
-</button>
-<div id="i-lem-sevi-yeleri" class="collapse-content">
-<div class="k">İŞLEM SEVİYELERİ — ONAYLI / ADAY GİRİŞ</div><div class="grid" style="margin-top:10px"><div class="metric"><div class="k">Giriş Bölgesi</div><div id="entryZone" class="v zone">—</div></div><div class="metric"><div class="k">Stop</div><div id="stop" class="v">—</div></div><div class="metric"><div class="k">TP1</div><div id="tp1" class="v">—</div></div><div class="metric"><div class="k">TP2</div><div id="tp2" class="v">—</div></div></div><div id="entryReason" class="sub" style="margin-top:9px">Ortak işlem onayı bekleniyor.</div>
-<div class="rr-grid">
-  <div class="metric"><div class="k">TP1 R/R</div><div id="rr1" class="v">—</div></div>
-  <div class="metric"><div class="k">TP2 R/R</div><div id="rr2" class="v">—</div></div>
-  <div class="metric"><div class="k">Risk %</div><div id="riskPct" class="v">—</div></div>
-  <div class="metric"><div class="k">Kalite</div><div id="tradeQuality" class="v">—</div></div>
-</div>
-</div>
-</div>
 
-<div class="card collapsible-card">
+
+<div class="card collapsible-card pro-panel">
 <button class="collapse-toggle" type="button" aria-expanded="false" data-target="tekni-k-durum">
   <span>TEKNİK DURUM</span><span class="chev">⌄</span>
 </button>
@@ -548,7 +671,7 @@ button.secondary{background:#2b333d;color:#fff}
 </div>
 </div>
 
-<div class="card collapsible-card">
+<div class="card collapsible-card pro-panel">
 <button class="collapse-toggle" type="button" aria-expanded="false" data-target="backtest-sonu-lari">
   <span>BACKTEST SONUÇLARI</span><span class="chev">⌄</span>
 </button>
@@ -607,7 +730,11 @@ function renderFav(){$("favorites").innerHTML=fav.map(s=>`<button class="fav" da
 async function loadSymbols(){try{let r=await fetch("/api/symbols"),d=await r.json();symbols=d.symbols||[]}catch(e){}}
 function showList(){let q=$("symbol").value.toUpperCase(),m=symbols.filter(x=>x.symbol.includes(q)||x.baseAsset.includes(q)).slice(0,100);$("list").innerHTML=m.map(x=>`<div class="item" data-s="${x.symbol}">${x.symbol}</div>`).join("");$("list").classList.add("open");document.querySelectorAll(".item").forEach(x=>x.onclick=()=>{$("symbol").value=x.dataset.s;$("list").classList.remove("open")})}
 $("symbol").oninput=e=>{e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"");showList()};$("symbol").onfocus=showList;document.addEventListener("click",e=>{if(!e.target.closest(".picker"))$("list").classList.remove("open")});
-function setDecision(s){$("decision").textContent=s;$("decision").className="word "+(s.includes("LONG")?"long":s.includes("SHORT")?"short":"wait")}
+function setDecision(s){
+  const easy=s.includes("LONG")?"AL":s.includes("SHORT")?"SAT":"BEKLE";
+  $("decision").textContent=easy;
+  $("decision").className="word easy-word "+(s.includes("LONG")?"long":s.includes("SHORT")?"short":"wait");
+}
 
 function calcRR(levels,decision){
   if(!levels||levels.entry==null||levels.stop==null)return null;
@@ -712,16 +839,65 @@ async function loadMarketContext(symbol,baseDirection){
 function activeSignalProfile(){return String(appSettings.signalProfile||"balanced")}
 function profileParam(){return `&profile=${encodeURIComponent(activeSignalProfile())}`}
 
+
+function friendlyStrength(d){
+  const conf=Number(d.common?.confidence||0),strong=String(d.common?.decision||"").includes("GÜÇLÜ");
+  const blockers=d.v7?.blockers?.length||0;
+  if(blockers)return {text:"⚠️ İşlem için uygun değil",cls:"warn"};
+  if(strong||conf>=82)return {text:"🟢 Güçlü sinyal",cls:"ok"};
+  if(conf>=68)return {text:"🟡 Orta güçte sinyal",cls:"warn"};
+  return {text:"⚪ Zayıf sinyal",cls:""};
+}
+function friendlyReasons(d){
+  const out=[];
+  const dir=String(d.common?.decision||"");
+  const isLong=dir.includes("LONG"),isShort=dir.includes("SHORT");
+  if(d.v7?.blockers?.length){
+    out.push(["⛔",`Şu anda işlem için uygun değil: ${d.v7.blockers[0]}.`]);
+    if(d.v7.blockers[1])out.push(["⚠️",d.v7.blockers[1]+"."]);
+  }else{
+    if(isLong)out.push(["📈","Kısa ve orta vadeli hareket yukarı yönü destekliyor."]);
+    else if(isShort)out.push(["📉","Kısa ve orta vadeli hareket aşağı yönü destekliyor."]);
+    else out.push(["⏳","Yön yeterince net değil; işlem açmak yerine beklemek daha güvenli."]);
+    const m=d.v7?.metrics||{};
+    if(Number.isFinite(m.adx))out.push([m.adx>=20?"✅":"⚠️",m.adx>=20?"Trend gücü yeterli görünüyor.":"Trend zayıf; sinyalin güveni düşük."]);
+    if(Number.isFinite(m.rvol))out.push([m.rvol>=1?"🔊":"🔈",m.rvol>=1?"Hacim hareketi destekliyor.":"Hacim normalin altında."]);
+  }
+  return out.slice(0,3);
+}
+function updateEasyUI(d){
+  const st=friendlyStrength(d);
+  $("easyStrength").textContent=st.text;
+  $("easyStrength").className="easy-strength "+(st.cls==="ok"?"quality-good":st.cls==="warn"?"quality-warn":"");
+  $("easyWhy").innerHTML=friendlyReasons(d).map(x=>`<div class="easy-why-item"><span class="easy-why-icon">${x[0]}</span><span>${x[1]}</span></div>`).join("");
+  if(d.levels?.entry!=null){
+    const risk=Math.abs(Number(d.levels.entry)-Number(d.levels.stop))/Number(d.levels.entry)*100;
+    $("easyRisk").textContent=`Stop mesafesi yaklaşık %${risk.toFixed(2)}. İşleme gireceksen küçük pozisyon kullan ve stopu değiştirme.`;
+    $("easyRisk").className="beginner-risk "+(risk<=1.5?"ok":risk<=3?"warn":"bad");
+  }else{
+    $("easyRisk").textContent="Şu anda net işlem planı oluşmadı. BEKLE daha doğru seçenek.";
+    $("easyRisk").className="beginner-risk warn";
+  }
+}
+
 async function analyze(){
  let symbol=$("symbol").value,interval=$("interval").value;$("status").textContent="Analiz ediliyor...";
  try{let r=await fetch(`/api/analyze?symbol=${symbol}&interval=${interval}${profileParam()}`),d=await r.json();if(!r.ok)throw Error(d.error);
- setDecision(d.common.decision);$("note").textContent=d.common.note;$("commonConf").textContent=d.common.confidence+"%";
+ setDecision(d.common.decision);
+ const dirText=d.common.decision.includes("LONG")?"Yukarı yön daha güçlü. Belirlenen giriş bölgesini bekle.":
+               d.common.decision.includes("SHORT")?"Aşağı yön daha güçlü. Belirlenen giriş bölgesini bekle.":
+               "Yön yeterince net değil. Yeni işlem açmak için acele etme.";
+ $("note").textContent=dirText;
+ $("commonConf").textContent=d.common.confidence+"%";
  $("legacySig").textContent=d.legacy.signal;$("longScore").textContent=d.legacy.longScore+"/7";$("shortScore").textContent=d.legacy.shortScore+"/7";$("legacyConf").textContent=d.legacy.confidence+"%";
  $("advScore").textContent=d.advanced.score+"/100";$("advLabel").textContent=d.advanced.label;
  $("breakdown").innerHTML=d.advanced.breakdown.map(x=>`<div class="metric"><div class="k">${x.label}</div><div class="v">${x.score}/${x.max}</div><div class="sub">${x.text}</div></div>`).join("");
  if(d.levels.entry!=null){$("entryZone").textContent=`${fmt(d.levels.entryLow)} – ${fmt(d.levels.entryHigh)}`;$("stop").textContent=fmt(d.levels.stop);$("tp1").textContent=fmt(d.levels.tp1);$("tp2").textContent=fmt(d.levels.tp2)}else{$("entryZone").textContent=$("stop").textContent=$("tp1").textContent=$("tp2").textContent="—"}
- $("entryReason").textContent=(d.levels.source && d.levels.source!=="SEVİYE YOK" ? d.levels.source+" • " : "")+d.levels.reason;
+ $("entryReason").textContent=d.levels.entry!=null
+   ? `Fiyat bu bölgeye geldiğinde sinyal hâlâ geçerliyse işlem düşünülebilir. ${d.levels.reason||""}`
+   : "Şu anda güvenli bir giriş bölgesi oluşmadı.";
  updateDecisionExtras(d);
+ updateEasyUI(d);
  await loadMarketContext(d.symbol,d.common?.decision!=="BEKLE"?d.common?.decision:d.advanced?.signal);
  $("reasons").innerHTML=d.legacy.reasons.map(x=>`<div class="row"><span>${x.label}</span><span class="${x.bias>0?"pos":x.bias<0?"neg":"neu"}">${x.text}</span></div>`).join("");
  $("status").textContent=`${d.symbol} • ${d.interval} • V7.1 ${String(d.v7?.profile||activeSignalProfile()).toUpperCase()} • Anlık fiyat ${fmt(d.price)} • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")}`;
@@ -763,6 +939,45 @@ if(scanCollapseBtn&&scanCollapseContent){
   });
 }
 
+
+
+function setAppMode(mode,save=true){
+  const pro=mode==="pro";
+  document.body.classList.toggle("pro-mode",pro);
+  document.body.classList.remove("show-pro");
+  const sb=document.getElementById("simpleModeBtn");
+  const pb=document.getElementById("proModeBtn");
+  if(sb)sb.classList.toggle("active",!pro);
+  if(pb)pb.classList.toggle("active",pro);
+  const desc=document.getElementById("modeDescription");
+  if(desc){
+    desc.textContent=pro
+      ?"Gelişmiş analiz, backtest ve profesyonel araçlar açık"
+      :"Yeni başlayanlar için sade AL / SAT / BEKLE görünümü";
+  }
+  if(save){
+    try{localStorage.setItem("bsa_app_mode",pro?"pro":"simple")}catch(e){}
+  }
+}
+(function initAppMode(){
+  let mode="simple";
+  try{mode=localStorage.getItem("bsa_app_mode")||"simple"}catch(e){}
+  setAppMode(mode,false);
+  const sb=document.getElementById("simpleModeBtn");
+  const pb=document.getElementById("proModeBtn");
+  if(sb)sb.addEventListener("click",()=>setAppMode("simple"));
+  if(pb)pb.addEventListener("click",()=>setAppMode("pro"));
+})();
+
+const toggleProBtn=document.getElementById("togglePro");
+if(toggleProBtn){
+  toggleProBtn.addEventListener("click",()=>{
+    const show=!document.body.classList.contains("show-pro");
+    document.body.classList.toggle("show-pro",show);
+    toggleProBtn.textContent=show?"⚙️ Teknik detayları gizle":"⚙️ Teknik detaylara hızlı bak";
+  });
+}
+
 let scanTimer=null;
 let scanData={strongLong:[],strongShort:[]};
 let scanFilter="ALL";
@@ -770,13 +985,13 @@ let scanFilter="ALL";
 function scanItem(x){
   const isLong=x.direction==="LONG";
   const cls=isLong?"scan-long":"scan-short";
-  const label=isLong?"GÜÇLÜ LONG":"GÜÇLÜ SHORT";
+  const label=isLong?"GÜÇLÜ AL":"GÜÇLÜ SAT";
   return `<div class="scan-item" data-symbol="${x.symbol}">
     <div>
       <div class="scan-symbol">${x.symbol}</div>
       <div class="scan-detail">${label} • ${x.reason}<br>Fiyat: ${fmt(x.price)}${x.adx!=null?` • ADX ${x.adx.toFixed(1)}`:""}${x.rvol!=null?` • RVOL ${x.rvol.toFixed(2)}`:""}</div>
       <div class="quality-row">${x.qualityPass?`<span class="quality-pill quality-good">KALİTELİ</span>`:`<span class="quality-pill quality-warn">STANDART</span>`}${x.shock?`<span class="quality-pill quality-bad">AŞIRI HAREKET</span>`:""}</div>
-      <div class="scan-action">Dokun → pariteyi analiz alanına taşı</div>
+      <div class="scan-action">Dokun → bu pariteyi incele</div>
     </div>
     <div class="scan-score ${cls}">${x.score}/100</div>
   </div>`;
@@ -973,7 +1188,8 @@ function openAppView(view){
     settingsView:"Ayarlar",
     chartsView:"Grafikler",
     performanceView:"Performans",
-    optimizerView:"V7 Optimizasyon",
+    optimizerView:"Sinyal Ayarı",
+    advancedInfoView:"Gelişmiş Bilgiler",
     riskView:"Risk Hesaplayıcı",
     paperView:"Paper Trading",
     signalsView:"Geçmiş Sinyaller"
@@ -1001,6 +1217,7 @@ function renderView(view){
   if(view==="chartsView")return renderChartsView();
   if(view==="performanceView")return renderPerformanceView();
   if(view==="optimizerView")return renderOptimizerView();
+  if(view==="advancedInfoView")return renderAdvancedInfoView();
   if(view==="riskView")return renderRiskView();
   if(view==="paperView")return renderPaperView();
   if(view==="signalsView")return renderSignalsView();
@@ -1307,7 +1524,7 @@ function renderRiskView(){
   const defEntry=lv.entry??(lv.entryLow!=null&&lv.entryHigh!=null?(Number(lv.entryLow)+Number(lv.entryHigh))/2:"");
   $("viewBody").innerHTML=`
     <div class="menu-card">
-      <div class="menu-card-title">Pozisyon Boyutu Hesaplayıcı</div>
+      <div class="menu-card-title">Pozisyon Hesabı</div>
       <div class="menu-card-sub">Bakiyenin kaçını riske attığını giriş ve stop mesafesine göre hesaplar. Kaldıraç riski azaltmaz; sadece gereken marjı değiştirir.</div>
       <div class="risk-calc-grid" style="margin-top:10px">
         <label><div class="menu-card-sub">Bakiye USDT</div><input id="riskBalance" type="number" inputmode="decimal" value="1000"></label>
@@ -1342,12 +1559,26 @@ function renderRiskView(){
 }
 
 
+
+function renderAdvancedInfoView(){
+  $("viewBody").innerHTML=`
+    <div class="menu-card">
+      <div class="menu-card-title">Gelişmiş Bilgiler</div>
+      <div class="menu-card-sub">Bu bölüm yeni başlayanlar için gerekli değildir. Sinyal motorunun teknik ayarlarını ve test ekranlarını burada bulabilirsin.</div>
+    </div>
+    <button class="menu-item advanced-nav" data-view="optimizerView" type="button"><span>🧪 Sinyal motoru ayarı</span><span>›</span></button>
+    <button class="menu-item advanced-nav" data-view="performanceView" type="button"><span>📈 Ayrıntılı istatistikler</span><span>›</span></button>
+    <button class="menu-item advanced-nav" data-view="riskView" type="button"><span>🧮 Ayrıntılı pozisyon hesabı</span><span>›</span></button>
+    <div class="menu-card"><div class="menu-card-sub">Ana ekranda “Teknik detayları göster” ile 7'li sistem, V7 skoru ve backtest sonuçlarını da açabilirsin.</div></div>`;
+  document.querySelectorAll(".advanced-nav").forEach(b=>b.onclick=()=>openAppView(b.dataset.view));
+}
+
 async function renderOptimizerView(){
   $("viewBody").innerHTML=`
     <div class="menu-card">
-      <div class="menu-card-title">V7.1 Çoklu Parite Optimizasyonu</div>
+      <div class="menu-card-title">Sinyal Motoru Ayarı</div>
       <div class="menu-card-sub">BTC, ETH, SOL, XRP, DOGE ve 1000PEPE • 5m • Balanced / Strict / Selective / Ultra karşılaştırması.</div>
-      <button id="runOptimizer" class="small-btn" type="button" style="width:100%;margin-top:10px">OPTİMİZASYONU ÇALIŞTIR</button>
+      <button id="runOptimizer" class="small-btn" type="button" style="width:100%;margin-top:10px">EN UYGUN AYARI BUL</button>
       <div id="optimizerStatus" class="menu-card-sub" style="margin-top:8px">Aktif profil: ${esc(activeSignalProfile().toUpperCase())}</div>
     </div>
     <div id="optimizerResults"></div>`;
