@@ -900,7 +900,16 @@ function renderFav(){
 async function loadSymbols(){
   if(currentExchange()==="margex"){symbols=MARGEX_PAIRS.map(x=>({symbol:x.symbol,baseAsset:x.base}));return}
   const url=currentExchange()==="binancetr"?"/api/binance-tr-symbols":"/api/symbols";
-  try{let r=await fetch(url,{cache:"no-store"}),d=await r.json();symbols=d.symbols||[]}catch(e){symbols=[]}
+  try{
+    let r=await fetch(url,{cache:"no-store"}),d=await r.json();
+    if(!r.ok)throw Error(d.error||"Pariteler okunamadı");
+    symbols=d.symbols||[];
+    if(currentExchange()==="binancetr"&&!symbols.length)throw Error("TRY paritesi bulunamadı");
+  }catch(e){
+    symbols=[];
+    const st=document.getElementById("status");
+    if(st&&currentExchange()==="binancetr")st.textContent="Binance TR pariteleri okunamadı: "+e.message;
+  }
 }
 function showList(){let q=$("symbol").value.toUpperCase(),m=symbols.filter(x=>x.symbol.includes(q)||x.baseAsset.includes(q)).slice(0,100);$("list").innerHTML=m.map(x=>`<div class="item" data-s="${x.symbol}">${x.symbol}</div>`).join("");$("list").classList.add("open");document.querySelectorAll(".item").forEach(x=>x.onclick=()=>{$("symbol").value=x.dataset.s;$("list").classList.remove("open");updateExchangeUI()})}
 $("symbol").oninput=e=>{e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"");showList();updateExchangeUI()};$("symbol").onfocus=showList;document.addEventListener("click",e=>{if(!e.target.closest(".picker"))$("list").classList.remove("open")});
