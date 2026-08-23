@@ -442,6 +442,7 @@ button.secondary{background:#2b333d;color:#fff}
       <button class="menu-item" type="button" data-view="settingsView"><span>⚙️ Ayarlar</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="chartsView"><span>📊 Grafikler</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="performanceView"><span>📊 Performans</span><span>›</span></button>
+      <button class="menu-item" type="button" data-view="optimizerView"><span>🧪 V7 Optimizasyon</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="riskView"><span>🧮 Risk Hesaplayıcı</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="paperView"><span>🧪 Paper Trading</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="signalsView"><span>📈 Geçmiş Sinyaller</span><span>›</span></button>
@@ -587,7 +588,8 @@ let appSettings=loadJSON("bsa_settings",{
   dailyLossLimitR:3,
   consecutiveLossLimit:3,
   lossPauseMinutes:60,
-  autoPaper:false
+  autoPaper:false,
+  signalProfile:"balanced"
 });
 appSettings.whitelist=Array.isArray(appSettings.whitelist)?appSettings.whitelist:[];
 appSettings.blacklist=Array.isArray(appSettings.blacklist)?appSettings.blacklist:[];
@@ -706,9 +708,13 @@ async function loadMarketContext(symbol,baseDirection){
   }
 }
 
+
+function activeSignalProfile(){return String(appSettings.signalProfile||"balanced")}
+function profileParam(){return `&profile=${encodeURIComponent(activeSignalProfile())}`}
+
 async function analyze(){
  let symbol=$("symbol").value,interval=$("interval").value;$("status").textContent="Analiz ediliyor...";
- try{let r=await fetch(`/api/analyze?symbol=${symbol}&interval=${interval}`),d=await r.json();if(!r.ok)throw Error(d.error);
+ try{let r=await fetch(`/api/analyze?symbol=${symbol}&interval=${interval}${profileParam()}`),d=await r.json();if(!r.ok)throw Error(d.error);
  setDecision(d.common.decision);$("note").textContent=d.common.note;$("commonConf").textContent=d.common.confidence+"%";
  $("legacySig").textContent=d.legacy.signal;$("longScore").textContent=d.legacy.longScore+"/7";$("shortScore").textContent=d.legacy.shortScore+"/7";$("legacyConf").textContent=d.legacy.confidence+"%";
  $("advScore").textContent=d.advanced.score+"/100";$("advLabel").textContent=d.advanced.label;
@@ -718,7 +724,7 @@ async function analyze(){
  updateDecisionExtras(d);
  await loadMarketContext(d.symbol,d.common?.decision!=="BEKLE"?d.common?.decision:d.advanced?.signal);
  $("reasons").innerHTML=d.legacy.reasons.map(x=>`<div class="row"><span>${x.label}</span><span class="${x.bias>0?"pos":x.bias<0?"neg":"neu"}">${x.text}</span></div>`).join("");
- $("status").textContent=`${d.symbol} • ${d.interval} • Anlık fiyat ${fmt(d.price)} • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")}`;
+ $("status").textContent=`${d.symbol} • ${d.interval} • V7.1 ${String(d.v7?.profile||activeSignalProfile()).toUpperCase()} • Anlık fiyat ${fmt(d.price)} • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")}`;
  latestAnalysis=d;
  saveAnalysisRecord(d);
  saveSignalRecord(d);
@@ -728,7 +734,7 @@ async function analyze(){
 function btCard(name,x){return `<div class="metric"><div class="k">${name}</div><div class="v">${x.winRate}% Win</div><div class="sub">${x.wins}W / ${x.losses}L • ${x.signals} sinyal<br>PF: ${x.profitFactor}</div></div>`}
 async function backtest(){
  let symbol=$("symbol").value,interval=$("interval").value;$("btStatus").textContent="Backtest çalışıyor...";
- try{let r=await fetch(`/api/backtest?symbol=${symbol}&interval=${interval}&limit=1000`),d=await r.json();if(!r.ok)throw Error(d.error);
+ try{let r=await fetch(`/api/backtest?symbol=${symbol}&interval=${interval}&limit=1000${profileParam()}`),d=await r.json();if(!r.ok)throw Error(d.error);
  $("btResults").innerHTML=btCard("7'li Sistem",d.legacy)+btCard("100 Puan",d.advanced)+btCard("Ortak Karar",d.common);
  $("btStatus").textContent=`${d.symbol} • ${d.interval} • ${d.candles} mum test edildi.`;
  $("btMethod").textContent=d.methodology;
@@ -831,7 +837,7 @@ async function runScanner(){
   btn.disabled=true;
   $("scanMeta").textContent="Yeni piyasa taraması yapılıyor...";
   try{
-    const r=await fetch(`/api/scan?t=${Date.now()}`,{cache:"no-store"});
+    const r=await fetch(`/api/scan?t=${Date.now()}${profileParam()}`,{cache:"no-store"});
     const d=await r.json();
     if(!r.ok)throw Error(d.error||"Tarama başarısız");
     scanData={strongLong:d.strongLong||[],strongShort:d.strongShort||[],btcDirection:d.btcDirection||"NEUTRAL",btcScore:d.btcScore??50};
@@ -967,6 +973,7 @@ function openAppView(view){
     settingsView:"Ayarlar",
     chartsView:"Grafikler",
     performanceView:"Performans",
+    optimizerView:"V7 Optimizasyon",
     riskView:"Risk Hesaplayıcı",
     paperView:"Paper Trading",
     signalsView:"Geçmiş Sinyaller"
@@ -993,6 +1000,7 @@ function renderView(view){
   if(view==="settingsView")return renderSettingsView();
   if(view==="chartsView")return renderChartsView();
   if(view==="performanceView")return renderPerformanceView();
+  if(view==="optimizerView")return renderOptimizerView();
   if(view==="riskView")return renderRiskView();
   if(view==="paperView")return renderPaperView();
   if(view==="signalsView")return renderSignalsView();
@@ -1333,6 +1341,53 @@ function renderRiskView(){
   };
 }
 
+
+async function renderOptimizerView(){
+  $("viewBody").innerHTML=`
+    <div class="menu-card">
+      <div class="menu-card-title">V7.1 Çoklu Parite Optimizasyonu</div>
+      <div class="menu-card-sub">BTC, ETH, SOL, XRP, DOGE ve 1000PEPE • 5m • Balanced / Strict / Selective / Ultra karşılaştırması.</div>
+      <button id="runOptimizer" class="small-btn" type="button" style="width:100%;margin-top:10px">OPTİMİZASYONU ÇALIŞTIR</button>
+      <div id="optimizerStatus" class="menu-card-sub" style="margin-top:8px">Aktif profil: ${esc(activeSignalProfile().toUpperCase())}</div>
+    </div>
+    <div id="optimizerResults"></div>`;
+  $("runOptimizer").onclick=runOptimizer;
+}
+async function runOptimizer(){
+  const b=$("runOptimizer"),status=$("optimizerStatus"),box=$("optimizerResults");
+  b.disabled=true;status.textContent="6 parite ve 4 profil backtest ediliyor. Bu işlem biraz sürebilir...";box.innerHTML="";
+  try{
+    const r=await fetch(`/api/optimize?t=${Date.now()}`,{cache:"no-store"});
+    const d=await r.json();if(!r.ok)throw Error(d.error||"Optimizasyon başarısız");
+    const cards=d.profiles.map(p=>`
+      <div class="menu-card">
+        <div class="menu-card-row">
+          <div>
+            <div class="menu-card-title">${esc(p.label)} ${p.profile===d.recommended?"🏆":""}</div>
+            <div class="menu-card-sub">Win ${p.combined.winRate}% • PF ${p.combined.profitFactor} • Expectancy ${p.combined.expectancyR}R • ${p.combined.resolved} sonuçlanan işlem</div>
+          </div>
+          <div class="performance-big">${p.combined.objective}</div>
+        </div>
+        <div class="menu-card-sub" style="margin-top:7px">${p.perPair.filter(x=>!x.error).map(x=>`${x.symbol}: ${x.winRate}% / ${x.expectancyR}R`).join("<br>")}</div>
+      </div>`).join("");
+    box.innerHTML=`
+      <div class="menu-card">
+        <div class="menu-card-title">Önerilen profil: ${esc(d.recommendedLabel)}</div>
+        <div class="menu-card-sub">${esc(d.methodology)}</div>
+        <button id="applyOptimizer" class="small-btn" type="button" style="width:100%;margin-top:10px">${esc(d.recommendedLabel)} PROFİLİNİ UYGULA</button>
+      </div>${cards}`;
+    $("applyOptimizer").onclick=()=>{
+      appSettings.signalProfile=d.recommended;
+      saveJSON("bsa_settings",appSettings);
+      status.textContent=`${d.recommendedLabel} profili uygulandı. Bundan sonraki analiz, tarama ve backtest bu profili kullanacak.`;
+      runScanner();
+    };
+    status.textContent=`Test tamamlandı • Öneri: ${d.recommendedLabel} • ${new Date(d.timestamp).toLocaleString("tr-TR")}`;
+  }catch(e){
+    status.textContent="Optimizasyon hatası: "+e.message;
+  }finally{b.disabled=false}
+}
+
 let tvLibPromise=null;
 let activeChart=null;
 
@@ -1408,7 +1463,7 @@ async function drawSelectedChart(){
     stage="analiz seviyeleri";
     let ad=null;
     try{
-      const analyzeUrl="/api/analyze?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval);
+      const analyzeUrl="/api/analyze?symbol="+encodeURIComponent(symbol)+"&interval="+encodeURIComponent(interval)+profileParam();
       const ar=await fetch(analyzeUrl,{method:"GET",headers:{"Accept":"application/json"}});
       const tmp=await ar.json();
       if(ar.ok) ad=tmp;
@@ -1623,7 +1678,12 @@ function renderSettingsView(){
         <div><div class="setting-label">Otomatik Paper Trading</div><div class="setting-desc">Analiz güçlü bir işlem seviyesi oluşturursa sanal işlem açmayı dener.</div></div>
         <input id="setAutoPaper" type="checkbox">
       </div>
+      
       <div class="setting-row">
+        <div><div class="setting-label">V7 sinyal profili</div><div class="setting-desc">Optimizasyon ekranından otomatik seçilebilir.</div></div>
+        <select id="setSignalProfile"><option value="balanced">Balanced</option><option value="strict">Strict</option><option value="selective">Selective</option><option value="ultra">Ultra</option></select>
+      </div>
+<div class="setting-row">
         <div><div class="setting-label">Sinyale dokununca otomatik analiz</div><div class="setting-desc">Canlı sinyal kartına dokununca ANALİZ'i otomatik çalıştır.</div></div>
         <input id="setAutoAnalyze" type="checkbox">
       </div>
@@ -1637,6 +1697,7 @@ function renderSettingsView(){
   $("setLongNotif").checked=!!appSettings.notifyStrongLong;
   $("setShortNotif").checked=!!appSettings.notifyStrongShort;
   $("setAutoAnalyze").checked=!!appSettings.autoAnalyzeOnSignal;
+  $("setSignalProfile").value=activeSignalProfile();
   $("setFee").value=Number(appSettings.feePctRoundTrip??0.10);
   $("setSlip").value=Number(appSettings.slippagePctRoundTrip??0.06);
   $("setCooldown").value=String(appSettings.cooldownMinutes??20);
@@ -1668,6 +1729,7 @@ function renderSettingsView(){
     appSettings.notifyStrongLong=$("setLongNotif").checked;
     appSettings.notifyStrongShort=$("setShortNotif").checked;
     appSettings.autoAnalyzeOnSignal=$("setAutoAnalyze").checked;
+    appSettings.signalProfile=$("setSignalProfile").value;
     appSettings.feePctRoundTrip=Math.max(0,Math.min(2,Number($("setFee").value)||0));
     appSettings.slippagePctRoundTrip=Math.max(0,Math.min(2,Number($("setSlip").value)||0));
     appSettings.cooldownMinutes=Number($("setCooldown").value)||0;
@@ -1681,7 +1743,7 @@ function renderSettingsView(){
     appSettings.autoPaper=$("setAutoPaper").checked;
     saveJSON("bsa_settings",appSettings);restartScannerTimer();renderScanResults();
   };
-  ["setScan","setInterval","setLongNotif","setShortNotif","setAutoAnalyze","setFee","setSlip","setCooldown","setBtcFilter","setShockGuard","setPaperBalance","setPaperRisk","setDailyLoss","setLossStreak","setLossPause","setAutoPaper"].forEach(id=>$(id).addEventListener("change",saveSettings));
+  ["setScan","setInterval","setLongNotif","setShortNotif","setAutoAnalyze","setSignalProfile","setFee","setSlip","setCooldown","setBtcFilter","setShockGuard","setPaperBalance","setPaperRisk","setDailyLoss","setLossStreak","setLossPause","setAutoPaper"].forEach(id=>$(id).addEventListener("change",saveSettings));
   $("browserNotifBtn").onclick=async()=>{
     if(!("Notification" in window)){alert("Bu cihaz/tarayıcı web bildirimini desteklemiyor.");return}
     try{
