@@ -195,7 +195,10 @@ function optimizedAt(d,o,h,l,c,v,n,mtf={m15:0,h1:0},profileName="balanced"){
   const likelyLong=score>=50;
   const likelyShort=score<50;
 
-  if(Number.isFinite(adxV)&&adxV<17)blockers.push("Yatay piyasa / ADX düşük");
+  if(Number.isFinite(adxV)&&adxV<17){
+    if(cfg.name==="fast")warnings.push("ADX düşük • Hızlı modda yalnızca uyarı");
+    else blockers.push("Yatay piyasa / ADX düşük");
+  }
   if(atrPct<.15)blockers.push("Volatilite çok düşük");
   if(atrPct>3.2)blockers.push("Volatilite aşırı yüksek");
   if(rv<.72)blockers.push("Hacim zayıf");
@@ -505,7 +508,7 @@ export default async function handler(req,res){
       common,
       levels,
       v7:{
-        version:"11.2",
+        version:"11.3",
         profile,
         thresholds:advanced.thresholds,
         mtf,
@@ -523,7 +526,7 @@ export default async function handler(req,res){
         minRR:1.5
       },
       v11:{
-        version:"11.2",
+        version:"11.3",
         directionTF:"5m",
         triggerTF:"1m",
         trend5m:direction5m,
@@ -535,7 +538,7 @@ export default async function handler(req,res){
   }catch(e){
     return res.status(500).json({
       error:e?.message||"Analiz hatası.",
-      engine:"V11.2"
+      engine:"V11.3"
     });
   }
 }

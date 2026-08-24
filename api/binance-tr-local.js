@@ -196,7 +196,10 @@ function optimizedAt(d,o,h,l,c,v,n,mtf={m15:0,h1:0},profileName="balanced"){
   const likelyLong=score>=50;
   const likelyShort=score<50;
 
-  if(Number.isFinite(adxV)&&adxV<17)blockers.push("Yatay piyasa / ADX düşük");
+  if(Number.isFinite(adxV)&&adxV<17){
+    if(cfg.name==="fast")warnings.push("ADX düşük • Hızlı modda yalnızca uyarı");
+    else blockers.push("Yatay piyasa / ADX düşük");
+  }
   if(atrPct<.15)blockers.push("Volatilite çok düşük");
   if(atrPct>3.2)blockers.push("Volatilite aşırı yüksek");
   if(rv<.72)blockers.push("Hacim zayıf");
@@ -466,8 +469,8 @@ async function doAnalyze(body){
     symbol,displaySymbol:symbol,interval:"5m+1m",exchange:"binancetr",marketType:"SPOT",quoteAsset:"TRY",
     interval,price:livePrice,signalClose:u.c[n],change24,legacy,advanced,common,levels,
     v7:{version:"10.0-TR",profile,thresholds:advanced.thresholds,mtf,blockers:advanced.blockers,confirmations:advanced.confirmations,metrics:advanced.metrics},
-    v10:{version:"11.2 Fast Scalp",trend:advanced.trend,stage:common.stage||micro.stage||advanced.stage,warnings:advanced.warnings,setup:advanced.setup,antiChase:true,minRR:1.5},
-    v11:{version:"11.2",directionTF:"5m",triggerTF:"1m",trend5m:direction5m,microTrigger:micro},
+    v10:{version:"11.3 Fast Scalp",trend:advanced.trend,stage:common.stage||micro.stage||advanced.stage,warnings:advanced.warnings,setup:advanced.setup,antiChase:true,minRR:1.5},
+    v11:{version:"11.3",directionTF:"5m",triggerTF:"1m",trend5m:direction5m,microTrigger:micro},
     dataSource:"Binance TR resmi API • proxy üzerinden",
     timestamp:new Date().toISOString()
   };
