@@ -353,12 +353,16 @@ async function getJson(url){
 
 export default async function handler(req,res){
   try{
-    const symbol=String(req.query.symbol||"BTCUSDT").toUpperCase(),interval=String(req.query.interval||"5m"),profile=getProfile(req.query.profile).name;
+    const symbol=String(req.query.symbol||"BTCUSDT").toUpperCase();
+    const requestedInterval=String(req.query.interval||"5m");
+    const interval="5m";
+    const profile=getProfile(req.query.profile).name;
     if(!/^[A-Z0-9]{5,20}$/.test(symbol))return res.status(400).json({error:"Geçersiz sembol."});
-    if(!["1m","3m","5m","15m","1h"].includes(interval))return res.status(400).json({error:"Geçersiz zaman dilimi."});
+    if(!["1m","3m","5m","15m","1h"].includes(requestedInterval))return res.status(400).json({error:"Geçersiz zaman dilimi."});
     const base="https://fapi.binance.com";
-    const [k,ticker,k15,k1h]=await Promise.all([
-      getJson(`${base}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=320`),
+    const [k,k1m,ticker,k15,k1h]=await Promise.all([
+      getJson(`${base}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=5m&limit=320`),
+      getJson(`${base}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=1m&limit=180`),
       getJson(`${base}/fapi/v1/ticker/24hr?symbol=${encodeURIComponent(symbol)}`),
       getJson(`${base}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=15m&limit=240`),
       getJson(`${base}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=1h&limit=240`)

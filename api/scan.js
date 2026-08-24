@@ -379,16 +379,19 @@ export default async function handler(req,res){
       const chunk=candidates.slice(i,i+4);
       const rows=await Promise.all(chunk.map(async x=>{
         try{
-          const [k15,k1h]=await Promise.all([
+          const [k1m,k15,k1h]=await Promise.all([
+            getJson(`${base}/fapi/v1/klines?symbol=${x.symbol}&interval=1m&limit=180`),
             getJson(`${base}/fapi/v1/klines?symbol=${x.symbol}&interval=15m&limit=220`),
             getJson(`${base}/fapi/v1/klines?symbol=${x.symbol}&interval=1h&limit=220`)
           ]);
           const mtf={m15:tfBiasFromKlines(k15),h1:tfBiasFromKlines(k1h)};
           const z=optimizedAt(x.d,x.u.o,x.u.h,x.u.l,x.u.c,x.u.v,x.n,mtf,profile);
-          if(z.signal==="BEKLE")return null;
-          const direction=z.signal,shock=z.metrics.atrPct>3.2||z.metrics.bodyAtr>2.1;
+          const direction=z.trend;
+          const micro=(direction==="LONG"||direction==="SHORT")?microTriggerFromKlines(k1m,direction):{ok:false,stage:"İZLE",reason:"5m yön net değil"};
+          if(z.signal==="BEKLE"||!micro.ok)return null;
+          const shock=z.metrics.atrPct>3.2||z.metrics.bodyAtr>2.1;
           const qualityPass=!shock&&!z.blockers.length&&z.confirmations>=cfg.minConf&&((direction==="LONG"&&z.score>=cfg.candidateLong)||(direction==="SHORT"&&z.score<=cfg.candidateShort));
-          return {symbol:x.symbol,direction,score:z.score,price:x.u.c[x.n],reason:z.breakdown.slice(0,3).map(a=>a.text).join(" • "),adx:z.metrics.adx,rvol:z.metrics.rvol,atrPct:z.metrics.atrPct,shock,qualityPass,confirmations:z.confirmations};
+          return {symbol:x.symbol,direction,score:z.score,price:x.u.c[x.n],reason:`${micro.reason} • ${z.breakdown.slice(0,2).map(a=>a.text).join(" • ")}`,microStage:micro.stage,adx:z.metrics.adx,rvol:z.metrics.rvol,atrPct:z.metrics.atrPct,shock,qualityPass,confirmations:z.confirmations};
         }catch(e){return null}
       }));
       final.push(...rows.filter(Boolean));
@@ -401,7 +404,7 @@ export default async function handler(req,res){
     res.setHeader("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");
     return res.status(200).json({
       scanned:baseRows.length,btcScore,btcDirection:dir(btcScore),ethScore,ethDirection:dir(ethScore),
-      strongLong,strongShort,timestamp:new Date().toISOString(),engine:"V7.1",profile
+      strongLong,strongShort,timestamp:new Date().toISOString(),engine:"V11.0 Realtime 5m+1m",profile
     });
   }catch(e){return res.status(500).json({error:e?.message||"Tarama hatası."})}
 }
