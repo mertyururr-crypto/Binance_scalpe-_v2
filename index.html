@@ -1855,14 +1855,33 @@ async function renderTestnetView(){
     <div class="menu-card">
       <div class="menu-card-title">Sinyalden Testnet İşlemi</div>
       <div class="menu-card-sub">${plan.ok?`${esc(plan.symbol)} • ${esc(plan.direction)} • SL ${fmt(plan.stop)} • TP1 ${fmt(plan.tp1)} • TP2 ${fmt(plan.tp2)}`:esc(plan.msg)}</div>
-      <div class="testnet-grid">
-        <div class="testnet-field"><label>RİSK %</label><input id="testnetRisk" type="number" min="0.1" max="2" step="0.1" value="0.5"></div>
-        <div class="testnet-field"><label>KALDIRAÇ</label><select id="testnetLev"><option>2</option><option selected>5</option><option>10</option><option>15</option><option>20</option></select></div>
+      <div class="seg" id="testnetPositionMode">
+        <button type="button" class="active" data-posmode="risk">RİSK %</button>
+        <button type="button" data-posmode="fixed">SABİT USDT</button>
       </div>
+
+      <div id="testnetRiskModeFields">
+        <div class="testnet-grid">
+          <div class="testnet-field"><label>RİSK %</label><input id="testnetRisk" type="number" min="0.1" max="2" step="0.1" value="0.5"></div>
+          <div class="testnet-field"><label>KALDIRAÇ</label><select id="testnetLev"><option>2</option><option selected>5</option><option>10</option><option>15</option><option>20</option></select></div>
+        </div>
+        <div class="menu-card-sub" style="margin-top:8px">Pozisyon büyüklüğü, stop mesafesi ve kullanılabilir bakiyeye göre hesaplanır.</div>
+      </div>
+
+      <div id="testnetFixedModeFields" style="display:none">
+        <div class="testnet-grid">
+          <div class="testnet-field"><label>POZİSYON TUTARI (USDT)</label><input id="testnetFixedUsdt" type="number" min="5" step="5" value="100"></div>
+          <div class="testnet-field"><label>KALDIRAÇ</label><select id="testnetLevFixed"><option>2</option><option selected>5</option><option>10</option><option>15</option><option>20</option></select></div>
+        </div>
+        <div class="menu-card-sub" style="margin-top:8px">Örn. 250 USDT yazarsan yaklaşık 250 USDT nominal pozisyon açılır. 5x kaldıraçta gereken teminat yaklaşık 50 USDT olur.</div>
+      </div>
+
+      <div id="testnetOrderPreview" class="menu-card-sub" style="margin-top:10px"></div>
+
       <div class="testnet-actions">
         <button id="testnetOpenLatest" class="small-btn" type="button" ${plan.ok?"":"disabled"}>TESTNET EMRİNİ AÇ</button>
       </div>
-      <div class="menu-card-sub" style="margin-top:8px">Pozisyon büyüklüğünü backend, stop mesafesi ve kullanılabilir USDT bakiyesine göre hesaplar. Risk üst sınırı %2, kaldıraç üst sınırı 20x'tir.</div>
+      <div class="menu-card-sub" style="margin-top:8px">Sabit USDT modunda kaldıraç pozisyon tutarını büyütmez; yalnızca gereken teminatı değiştirir. Maksimum kaldıraç 20x.</div>
     </div>
 
     <div id="testnetPositionsBox" class="menu-card">
@@ -1874,6 +1893,41 @@ async function renderTestnetView(){
       <div class="menu-card-title">Koruyucu Emirler (SL / TP)</div>
       <div class="menu-card-sub">Henüz yüklenmedi.</div>
     </div>`;
+
+  let testnetPositionMode="risk";
+  const modeBox=$("testnetPositionMode");
+  const riskFields=$("testnetRiskModeFields");
+  const fixedFields=$("testnetFixedModeFields");
+  const preview=$("testnetOrderPreview");
+
+  function updateTestnetOrderPreview(){
+    const lev=testnetPositionMode==="fixed"?Number($("testnetLevFixed").value):Number($("testnetLev").value);
+    if(testnetPositionMode==="fixed"){
+      const usdt=Math.max(0,Number($("testnetFixedUsdt").value)||0);
+      const px=Number(plan?.symbol&&latestAnalysis?.price||latestAnalysis?.signalClose||0);
+      const estQty=px>0?usdt/px:null;
+      preview.textContent=usdt>0
+        ? `Yaklaşık giriş: ${px?fmt(px):"-"} • Pozisyon: ${usdt.toFixed(2)} USDT • ${lev}x • Tahmini teminat: ${(usdt/lev).toFixed(2)} USDT${estQty?` • Yaklaşık ${estQty.toFixed(estQty<1?6:estQty<100?4:2)} ${String(plan?.symbol||"").replace(/USDT$/,"")}`:""}`
+        : "Sabit USDT tutarı gir.";
+    }else{
+      const risk=Number($("testnetRisk").value)||0;
+      preview.textContent=`Risk bazlı hesap • Risk %${risk} • ${lev}x • Kesin coin miktarı emir anında backend tarafından hesaplanır.`;
+    }
+  }
+
+  modeBox.querySelectorAll("[data-posmode]").forEach(btn=>btn.onclick=()=>{
+    testnetPositionMode=btn.dataset.posmode;
+    modeBox.querySelectorAll("[data-posmode]").forEach(x=>x.classList.toggle("active",x===btn));
+    riskFields.style.display=testnetPositionMode==="risk"?"block":"none";
+    fixedFields.style.display=testnetPositionMode==="fixed"?"block":"none";
+    updateTestnetOrderPreview();
+  });
+
+  ["testnetRisk","testnetLev","testnetFixedUsdt","testnetLevFixed"].forEach(id=>{
+    const el=$(id); if(el)el.addEventListener("input",updateTestnetOrderPreview);
+    if(el)el.addEventListener("change",updateTestnetOrderPreview);
+  });
+  updateTestnetOrderPreview();
 
   $("testnetSaveToken").onclick=()=>{
     saveTestnetToken($("testnetTokenInput").value.trim());
@@ -1895,15 +1949,17 @@ async function renderTestnetView(){
     }
     saveTestnetToken($("testnetTokenInput").value.trim());
     const risk=Number($("testnetRisk").value);
-    const lev=Number($("testnetLev").value);
+    const fixedNotional=Number($("testnetFixedUsdt").value);
+    const lev=testnetPositionMode==="fixed"?Number($("testnetLevFixed").value):Number($("testnetLev").value);
+    const modeText=testnetPositionMode==="fixed"?`${fixedNotional} USDT sabit pozisyon`:`Risk %${risk}`;
 
-    $("testnetStatus").textContent=`Emir hazırlanıyor • ${p.symbol} ${p.direction} • Risk %${risk} • ${lev}x`;
+    $("testnetStatus").textContent=`Emir hazırlanıyor • ${p.symbol} ${p.direction} • ${modeText} • ${lev}x`;
     openBtn.disabled=true;
     openBtn.textContent="EMİR HAZIRLANIYOR...";
 
     try{
       const confirmed=window.confirm(
-        `BINANCE FUTURES TESTNET\n\n${p.symbol} ${p.direction}\nRisk: %${risk}\nKaldıraç: ${lev}x\nSL: ${p.stop}\nTP1: ${p.tp1}\nTP2: ${p.tp2}\n\nTestnet emri açılsın mı?`
+        `BINANCE FUTURES TESTNET\n\n${p.symbol} ${p.direction}\nYaklaşık giriş fiyatı: ${latestAnalysis?.price?fmt(Number(latestAnalysis.price)):"-"}\n${testnetPositionMode==="fixed"?`Pozisyon: ${fixedNotional} USDT\nYaklaşık miktar: ${latestAnalysis?.price?(fixedNotional/Number(latestAnalysis.price)).toFixed((fixedNotional/Number(latestAnalysis.price))<1?6:4):"-"} ${p.symbol.replace(/USDT$/,"")}\nTahmini teminat: ${(fixedNotional/lev).toFixed(2)} USDT`:`Risk: %${risk}\nKesin coin miktarı backend hesaplar.`}\nKaldıraç: ${lev}x\nSL: ${p.stop}\nTP1: ${p.tp1}\nTP2: ${p.tp2}\n\nTestnet emri açılsın mı?`
       );
       if(!confirmed){
         $("testnetStatus").textContent="Emir iptal edildi.";
@@ -1919,11 +1975,15 @@ async function renderTestnetView(){
         stop:p.stop,
         tp1:p.tp1,
         tp2:p.tp2,
+        positionMode:testnetPositionMode,
         riskPercent:risk,
+        fixedNotional:fixedNotional,
         leverage:lev
       });
 
-      $("testnetStatus").textContent=`✅ Açıldı • ${d.symbol} ${d.direction} • ${d.quantity} adet • ${Number(d.notional).toFixed(2)} USDT`;
+      const baseAsset=String(d.symbol||"").replace(/USDT$/,"");
+      const actualEntry=Number(d.entryOrder?.avgPrice||d.entryOrder?.price||d.markPrice||0);
+      $("testnetStatus").textContent=`✅ Açıldı • ${d.symbol} ${d.direction} • Giriş ${actualEntry?fmt(actualEntry):"-"} • ${Number(d.notional).toFixed(2)} USDT • ${d.quantity} ${baseAsset} • ~${Number(d.estimatedMargin||0).toFixed(2)} USDT teminat`;
 
       await new Promise(r=>setTimeout(r,1000));
       await refreshTestnetDashboard();
@@ -1993,10 +2053,16 @@ function renderTestnetPositions(rows){
     (rows.length?rows.map(x=>`
       <div class="testnet-pos">
         <div class="menu-card-row">
-          <div><strong>${esc(x.symbol)}</strong><div class="menu-card-sub">${x.positionAmt>0?"LONG":"SHORT"} • ${Math.abs(x.positionAmt)} • ${x.leverage}x</div></div>
+          <div><strong>${esc(x.symbol)}</strong><div class="menu-card-sub">${x.positionAmt>0?"LONG":"SHORT"} • ${Math.abs(x.positionAmt)} ${esc(String(x.symbol).replace(/USDT$/,""))} • ${x.leverage}x</div></div>
           <div style="text-align:right"><div>${Number(x.unrealizedProfit).toFixed(2)} USDT</div><div class="menu-card-sub">PnL</div></div>
         </div>
-        <div class="menu-card-sub">Entry ${fmt(x.entryPrice)} • Mark ${fmt(x.markPrice)} • Liq ${fmt(x.liquidationPrice)}</div>
+        <div class="simple-summary-grid" style="margin-top:8px">
+          <div class="simple-kpi"><div class="k">GİRİŞ FİYATI</div><div class="v">${fmt(x.entryPrice)}</div></div>
+          <div class="simple-kpi"><div class="k">MARK FİYATI</div><div class="v">${fmt(x.markPrice)}</div></div>
+          <div class="simple-kpi"><div class="k">POZİSYON</div><div class="v">${(Math.abs(Number(x.positionAmt))*Number(x.markPrice||0)).toFixed(2)} USDT</div></div>
+          <div class="simple-kpi"><div class="k">MİKTAR</div><div class="v">${Math.abs(Number(x.positionAmt))} ${esc(String(x.symbol).replace(/USDT$/,""))}</div></div>
+        </div>
+        <div class="menu-card-sub" style="margin-top:8px">Likidasyon: ${fmt(x.liquidationPrice)}</div>
         <button class="small-btn testnet-danger testnet-close-pos" data-symbol="${esc(x.symbol)}" type="button" style="width:100%;margin-top:8px">TESTNET POZİSYONU KAPAT</button>
       </div>`).join(""):`<div class="menu-card-sub">Açık pozisyon yok.</div>`);
   box.querySelectorAll(".testnet-close-pos").forEach(b=>b.onclick=async()=>{
