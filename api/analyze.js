@@ -263,38 +263,47 @@ function v11DirectionEligible(advanced,profileName="balanced"){
   const cfg=getProfile(profileName);
   const mode=cfg.name;
   const score=Number(advanced.score||50);
-  const trend=advanced.trend||"NÖTR";
-  const hard=(advanced.blockers||[]).filter(x=>
-    /Volatilite aşırı|Anormal büyük mum|GEÇ KALINDI|PUMP KOVALAMA|DUMP KOVALAMA|15m \+ 1h/.test(String(x))
-  );
 
-  if(hard.length)return {ok:false,direction:trend,reason:hard[0]};
+  // V11.2: Hızlı/Dengeli modda 5m retest zorunlu değil.
+  // 5m yalnızca yön/rejim filtresi; esas giriş 1m tetikleyicide.
+  let direction="NÖTR";
+  if(score>=56)direction="LONG";
+  else if(score<=44)direction="SHORT";
+
+  const hard=(advanced.blockers||[]).filter(x=>
+    /Volatilite aşırı|Anormal büyük mum|15m \+ 1h/.test(String(x))
+  );
+  if(hard.length)return {ok:false,direction,reason:hard[0]};
 
   if(mode==="safe"){
     const ok=advanced.signal==="LONG"||advanced.signal==="SHORT";
-    return {ok,direction:ok?advanced.signal:trend,reason:ok?"5m Güvenli setup hazır":"5m güvenli retest/setup bekleniyor"};
+    return {
+      ok,
+      direction:ok?advanced.signal:direction,
+      reason:ok?"5m Güvenli setup hazır":"5m güvenli setup/retest bekleniyor"
+    };
   }
 
-  const longMin=mode==="fast"?66:71;
-  const shortMax=mode==="fast"?34:29;
-  const minConf=mode==="fast"?2:3;
+  const longMin=mode==="fast"?57:62;
+  const shortMax=mode==="fast"?43:38;
+  const minConf=mode==="fast"?1:2;
 
-  if(trend==="LONG"&&score>=longMin&&(advanced.confirmations||0)>=minConf){
-    return {ok:true,direction:"LONG",reason:`5m ${mode==="fast"?"Hızlı":"Dengeli"} LONG yön hazır`};
+  if(score>=longMin&&(advanced.confirmations||0)>=minConf){
+    return {ok:true,direction:"LONG",reason:`5m ${mode==="fast"?"Hızlı":"Dengeli"} LONG yön`};
   }
-  if(trend==="SHORT"&&score<=shortMax&&(advanced.confirmations||0)>=minConf){
-    return {ok:true,direction:"SHORT",reason:`5m ${mode==="fast"?"Hızlı":"Dengeli"} SHORT yön hazır`};
+  if(score<=shortMax&&(advanced.confirmations||0)>=minConf){
+    return {ok:true,direction:"SHORT",reason:`5m ${mode==="fast"?"Hızlı":"Dengeli"} SHORT yön`};
   }
-  return {ok:false,direction:trend,reason:"5m yön/skor henüz yeterli değil"};
+  return {ok:false,direction,reason:"5m yön henüz yeterince belirgin değil"};
 }
 function microTriggerFromKlines(k1m,direction,profileName="balanced"){
-  if(!Array.isArray(k1m)||k1m.length<80)return {ok:false,stage:"İZLE",reason:"1m veri yetersiz",criteria:{passed:0,total:4}};
+  if(!Array.isArray(k1m)||k1m.length<60)return {ok:false,stage:"İZLE",reason:"1m veri yetersiz",criteria:{passed:0,total:4,needed:0}};
   const cfg=getProfile(profileName);
   const mode=cfg.name;
   const u=unpack(k1m,true);
   const d=calcAll(u.o,u.h,u.l,u.c,u.v);
   const n=u.c.length-1;
-  if(n<30)return {ok:false,stage:"İZLE",reason:"1m veri yetersiz",criteria:{passed:0,total:4}};
+  if(n<30)return {ok:false,stage:"İZLE",reason:"1m veri yetersiz",criteria:{passed:0,total:4,needed:0}};
 
   const a=d.atrV[n]||Math.max(u.c[n]*.0025,1e-12);
   const range=Math.max(u.h[n]-u.l[n],1e-12);
@@ -307,19 +316,19 @@ function microTriggerFromKlines(k1m,direction,profileName="balanced"){
   const move2=(u.c[n]-u.c[Math.max(0,n-2)])/a;
   const histSlope=d.hist[n]-d.hist[Math.max(0,n-2)];
 
-  const retestTol=mode==="fast"?.22:mode==="safe"?.10:.16;
-  const closeNeed=mode==="fast"?.55:mode==="safe"?.64:.59;
-  const volNeed=mode==="fast"?.55:mode==="safe"?.82:.68;
-  const maxDist=mode==="fast"?.78:mode==="safe"?.48:.62;
+  const retestTol=mode==="fast"?.32:mode==="safe"?.10:.20;
+  const closeNeed=mode==="fast"?.52:mode==="safe"?.64:.57;
+  const volNeed=mode==="fast"?.45:mode==="safe"?.82:.62;
+  const maxDist=mode==="fast"?1.00:mode==="safe"?.48:.72;
 
-  const longRetest=u.l[n]<=d.e20[n]+retestTol*a && u.c[n]>=d.e20[n]-.03*a;
-  const shortRetest=u.h[n]>=d.e20[n]-retestTol*a && u.c[n]<=d.e20[n]+.03*a;
+  const longRetest=u.l[n]<=d.e20[n]+retestTol*a && u.c[n]>=d.e20[n]-.08*a;
+  const shortRetest=u.h[n]>=d.e20[n]-retestTol*a && u.c[n]<=d.e20[n]+.08*a;
 
-  const longReject=((lowerWick/range)>=.18 || u.c[n]>u.o[n]) && closePos>=closeNeed;
-  const shortReject=((upperWick/range)>=.18 || u.c[n]<u.o[n]) && closePos<=1-closeNeed;
+  const longReject=((lowerWick/range)>=.14 || u.c[n]>u.o[n]) && closePos>=closeNeed;
+  const shortReject=((upperWick/range)>=.14 || u.c[n]<u.o[n]) && closePos<=1-closeNeed;
 
-  const longMomentum=histSlope>=0 && rsi>=40 && rsi<=72;
-  const shortMomentum=histSlope<=0 && rsi>=28 && rsi<=60;
+  const longMomentum=histSlope>=-.02*a && rsi>=38 && rsi<=74;
+  const shortMomentum=histSlope<=.02*a && rsi>=26 && rsi<=62;
   const volumeOk=rv>=volNeed;
 
   const criteria=direction==="LONG"
@@ -327,16 +336,16 @@ function microTriggerFromKlines(k1m,direction,profileName="balanced"){
     : {retest:shortRetest,rejection:shortReject,momentum:shortMomentum,volume:volumeOk};
 
   const passed=Object.values(criteria).filter(Boolean).length;
-  const needed=mode==="safe"?4:3;
+  const needed=mode==="fast"?2:mode==="safe"?4:3;
 
-  // Hard blockers are NEVER relaxed, even in HIZLI.
+  // Bunlar moddan bağımsız kesin engeller.
   const blockers=[];
-  if(direction==="LONG"&&rsi>72)blockers.push("1m RSI aşırı yüksek");
-  if(direction==="SHORT"&&rsi<28)blockers.push("1m RSI aşırı düşük");
-  if(direction==="LONG"&&dist>maxDist)blockers.push("1m fiyat girişten kaçtı");
-  if(direction==="SHORT"&&dist<-maxDist)blockers.push("1m fiyat girişten kaçtı");
-  if(direction==="LONG"&&move2>1.15&&!longRetest)blockers.push("1m pump kovalanmıyor");
-  if(direction==="SHORT"&&move2<-1.15&&!shortRetest)blockers.push("1m dump kovalanmıyor");
+  if(direction==="LONG"&&rsi>76)blockers.push("1m RSI aşırı yüksek");
+  if(direction==="SHORT"&&rsi<24)blockers.push("1m RSI aşırı düşük");
+  if(direction==="LONG"&&dist>maxDist)blockers.push("1m fiyat fazla kaçtı");
+  if(direction==="SHORT"&&dist<-maxDist)blockers.push("1m fiyat fazla kaçtı");
+  if(direction==="LONG"&&move2>1.45&&!longRetest)blockers.push("1m ani pump kovalanmıyor");
+  if(direction==="SHORT"&&move2<-1.45&&!shortRetest)blockers.push("1m ani dump kovalanmıyor");
 
   const ok=passed>=needed&&!blockers.length;
   let stage="İZLE";
@@ -344,10 +353,10 @@ function microTriggerFromKlines(k1m,direction,profileName="balanced"){
 
   if(ok){
     stage=direction==="LONG"?"AL":"SAT";
-    reason=`1m ${passed}/4 teyit tamam • ${mode==="fast"?"Hızlı":mode==="safe"?"Güvenli":"Dengeli"} giriş`;
-  }else if(passed>=needed-1&&!blockers.length){
+    reason=`1m ${passed}/4 teyit • ${mode==="fast"?"Hızlı":mode==="safe"?"Güvenli":"Dengeli"} tetik`;
+  }else if(passed>=Math.max(1,needed-1)&&!blockers.length){
     stage="HAZIR";
-    reason=`1m ${passed}/4 teyit • 1 kriter daha bekleniyor`;
+    reason=`1m ${passed}/4 teyit • tetik çok yakın`;
   }else if(blockers.length){
     reason=blockers[0];
   }
@@ -496,7 +505,7 @@ export default async function handler(req,res){
       common,
       levels,
       v7:{
-        version:"11.1",
+        version:"11.2",
         profile,
         thresholds:advanced.thresholds,
         mtf,
@@ -514,7 +523,7 @@ export default async function handler(req,res){
         minRR:1.5
       },
       v11:{
-        version:"11.1",
+        version:"11.2",
         directionTF:"5m",
         triggerTF:"1m",
         trend5m:direction5m,
@@ -526,7 +535,7 @@ export default async function handler(req,res){
   }catch(e){
     return res.status(500).json({
       error:e?.message||"Analiz hatası.",
-      engine:"V11.1"
+      engine:"V11.2"
     });
   }
 }
