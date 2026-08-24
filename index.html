@@ -723,10 +723,10 @@ body.pro-mode .backtest-main{display:block!important}
 
 <div class="card collapsible-card pro-panel">
 <button class="collapse-toggle" type="button" aria-expanded="false" data-target="100-puanlik-geli-mi-si-stem">
-  <span>V11.2 HIZLI SCALP MOTORU</span><span class="chev">⌄</span>
+  <span>V11.3 HIZLI SCALP MOTORU</span><span class="chev">⌄</span>
 </button>
 <div id="100-puanlik-geli-mi-si-stem" class="collapse-content">
-<div class="k">V11.2 HIZLI SCALP MOTORU</div><div class="grid"><div class="metric"><div class="k">Skor</div><div id="advScore" class="v">—</div></div><div class="metric" style="grid-column:span 3"><div class="k">Değerlendirme</div><div id="advLabel" class="v">—</div></div></div><div id="breakdown" class="grid" style="margin-top:10px"></div>
+<div class="k">V11.3 HIZLI SCALP MOTORU</div><div class="grid"><div class="metric"><div class="k">Skor</div><div id="advScore" class="v">—</div></div><div class="metric" style="grid-column:span 3"><div class="k">Değerlendirme</div><div id="advLabel" class="v">—</div></div></div><div id="breakdown" class="grid" style="margin-top:10px"></div>
 </div>
 </div>
 
@@ -1116,7 +1116,7 @@ function refreshScalpButtons(){
   const h=document.getElementById("scalpSimpleHelp");
   if(h){
     h.textContent=p==="fast"
-      ?"Hızlı: 5m yalnızca yönü belirler; 1m’de 4 kriterden 2 teyit yeterli. Aşırı RSI, fiyat kaçması ve ani pump/dump engelleri açık."
+      ?"Hızlı: 5m yön + 1m’de 2/4 teyit. Düşük ADX yalnızca uyarıdır; aşırı RSI, fiyat kaçması ve ani pump/dump kesin engeldir."
       :p==="safe"
       ?"Güvenli: daha güçlü teyit ister; daha az sinyal verir."
       :"Dengeli: sinyal sıklığı ve kalite arasında orta seviye.";
@@ -1245,7 +1245,7 @@ async function analyze(){
    ? `${displaySymbol} • Margex parametreleri • Referans veri: Binance Futures (${symbol}) • ${d.interval} • Anlık referans ${fmt(d.price)}`
    : currentExchange()==="binancetr"
    ? `${displaySymbol} • Binance TR SPOT • Kendi TRY verisi • ${d.interval} • ${fmt(d.price)} TL`
-   : `${d.symbol} • ${d.interval} • V11.2 HIZLI SCALP ${String(d.v7?.profile||activeSignalProfile()).toUpperCase()} • Anlık fiyat ${fmt(d.price)} • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")}`;
+   : `${d.symbol} • ${d.interval} • V11.3 HIZLI SCALP ${String(d.v7?.profile||activeSignalProfile()).toUpperCase()} • Anlık fiyat ${fmt(d.price)} • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")}`;
  latestAnalysis=d;
  saveAnalysisRecord(d);
  saveSignalRecord(d);
