@@ -676,6 +676,7 @@ body.pro-mode .backtest-main{display:block!important}
     <div class="simple-kpi"><div class="k">TREND</div><div id="v10Trend" class="v">—</div></div>
     <div class="simple-kpi"><div class="k">1m TETİK</div><div id="v10Stage" class="v">İZLE</div></div>
   </div>
+  <div id="v11Criteria" class="menu-card-sub" style="margin-top:8px">1m teyit: —</div>
   <div id="note" class="easy-message">Pariteyi seçip “SİNYALİ GÖSTER” butonuna bas.</div>
   <div id="commonConf" class="beginner-hide">—</div>
   <div id="conflictBox" class="conflict-box"></div>
@@ -722,10 +723,10 @@ body.pro-mode .backtest-main{display:block!important}
 
 <div class="card collapsible-card pro-panel">
 <button class="collapse-toggle" type="button" aria-expanded="false" data-target="100-puanlik-geli-mi-si-stem">
-  <span>V11 REALTIME SCALP MOTORU</span><span class="chev">⌄</span>
+  <span>V11.1 CANLI SCALP MOTORU</span><span class="chev">⌄</span>
 </button>
 <div id="100-puanlik-geli-mi-si-stem" class="collapse-content">
-<div class="k">V11 REALTIME SCALP MOTORU</div><div class="grid"><div class="metric"><div class="k">Skor</div><div id="advScore" class="v">—</div></div><div class="metric" style="grid-column:span 3"><div class="k">Değerlendirme</div><div id="advLabel" class="v">—</div></div></div><div id="breakdown" class="grid" style="margin-top:10px"></div>
+<div class="k">V11.1 CANLI SCALP MOTORU</div><div class="grid"><div class="metric"><div class="k">Skor</div><div id="advScore" class="v">—</div></div><div class="metric" style="grid-column:span 3"><div class="k">Değerlendirme</div><div id="advLabel" class="v">—</div></div></div><div id="breakdown" class="grid" style="margin-top:10px"></div>
 </div>
 </div>
 
@@ -1115,7 +1116,7 @@ function refreshScalpButtons(){
   const h=document.getElementById("scalpSimpleHelp");
   if(h){
     h.textContent=p==="fast"
-      ?"Hızlı: daha fazla fırsat verir; yanlış sinyal riski de artar."
+      ?"Hızlı: 5m yön + 1m’de 4 kriterden 3 teyit. Daha sık fırsat; anti-pump/RSI/fiyat kaçtı filtreleri açık."
       :p==="safe"
       ?"Güvenli: daha güçlü teyit ister; daha az sinyal verir."
       :"Dengeli: sinyal sıklığı ve kalite arasında orta seviye.";
@@ -1200,6 +1201,10 @@ async function analyze(){
    $("v10Stage").textContent=stage;
    $("v10Stage").className="v "+(stage==="AL"||stage==="SAT"?"v10-go":stage==="HAZIR"?"v10-ready":"");
  }
+ const crit=d.v11?.microTrigger?.criteria;
+ if($("v11Criteria")){
+   $("v11Criteria").textContent=crit?`1m teyit: ${crit.passed}/${crit.total} • Gerekli: ${crit.needed}/${crit.total}`:"1m teyit: —";
+ }
  const blockers=[...(d.advanced?.blockers||[]),...(d.v11?.microTrigger?.blockers||[])];
  const dirText=d.common.decision.includes("LONG")
    ?"AL: trend + retest + tepki teyidi tamamlandı. Stop olmadan işlem açma."
@@ -1240,7 +1245,7 @@ async function analyze(){
    ? `${displaySymbol} • Margex parametreleri • Referans veri: Binance Futures (${symbol}) • ${d.interval} • Anlık referans ${fmt(d.price)}`
    : currentExchange()==="binancetr"
    ? `${displaySymbol} • Binance TR SPOT • Kendi TRY verisi • ${d.interval} • ${fmt(d.price)} TL`
-   : `${d.symbol} • ${d.interval} • V11 REALTIME SCALP ${String(d.v7?.profile||activeSignalProfile()).toUpperCase()} • Anlık fiyat ${fmt(d.price)} • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")}`;
+   : `${d.symbol} • ${d.interval} • V11.1 CANLI SCALP ${String(d.v7?.profile||activeSignalProfile()).toUpperCase()} • Anlık fiyat ${fmt(d.price)} • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")}`;
  latestAnalysis=d;
  saveAnalysisRecord(d);
  saveSignalRecord(d);
