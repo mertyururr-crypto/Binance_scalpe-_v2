@@ -553,6 +553,11 @@ body.margex-mode .exchange-warning{display:block}
 .testnet-pos:last-child{border-bottom:0}
 @media(min-width:600px){.testnet-actions{grid-template-columns:1fr 1fr}}
 
+
+#testnetOpenLatest{min-height:52px;cursor:pointer;touch-action:manipulation;font-weight:950}
+#testnetOpenLatest:not(:disabled){background:var(--yellow)!important;color:#101216!important;border-color:var(--yellow)!important}
+#testnetOpenLatest:disabled{opacity:.55;cursor:not-allowed}
+
 </style></head>
 <body>
 <div id="menuOverlay" class="menu-overlay" aria-hidden="true">
@@ -1525,10 +1530,14 @@ const menuOverlay=$("menuOverlay"),appView=$("appView");
 function openMenu(){
   menuOverlay.classList.add("open");menuOverlay.setAttribute("aria-hidden","false");
 }
+let activeAppView=null;
+
 function closeMenu(){
   menuOverlay.classList.remove("open");menuOverlay.setAttribute("aria-hidden","true");
 }
 function closeView(){
+  activeAppView=null;
+  if(window.__testnetRefreshTimer){clearInterval(window.__testnetRefreshTimer);window.__testnetRefreshTimer=null;}
   destroyChart();
   appView.classList.remove("open");appView.setAttribute("aria-hidden","true");
 }
@@ -1542,6 +1551,7 @@ document.querySelectorAll(".menu-item[data-view]").forEach(btn=>{
 });
 
 function openAppView(view){
+  activeAppView=view;
   const titles={
     favoritesView:"Favoriler",
     recentView:"Son Analizler",
@@ -1870,29 +1880,64 @@ async function renderTestnetView(){
     $("testnetStatus").textContent="Testnet hesabı okunuyor...";
     try{await refreshTestnetDashboard()}catch(e){}
   };
-  $("testnetOpenLatest").onclick=async()=>{
-    const p=testnetLatestPlan();if(!p.ok){alert(p.msg);return}
+  const openBtn=$("testnetOpenLatest");
+  openBtn.addEventListener("click",async(e)=>{
+    e.preventDefault();
+    e.stopPropagation();
+    const p=plan;
+    if(!p.ok){
+      $("testnetStatus").textContent=p.msg;
+      return;
+    }
     saveTestnetToken($("testnetTokenInput").value.trim());
-    const risk=Number($("testnetRisk").value),lev=Number($("testnetLev").value);
-    const ok=confirm(`TESTNET ${p.direction} emri açılsın mı?\n${p.symbol}\nRisk: %${risk}\nKaldıraç: ${lev}x\nSL: ${p.stop}\nTP1: ${p.tp1}\nTP2: ${p.tp2}`);
-    if(!ok)return;
-    $("testnetStatus").textContent="Testnet emirleri gönderiliyor...";
+    const risk=Number($("testnetRisk").value);
+    const lev=Number($("testnetLev").value);
+
+    $("testnetStatus").textContent=`Emir hazırlanıyor • ${p.symbol} ${p.direction} • Risk %${risk} • ${lev}x`;
+    openBtn.disabled=true;
+    openBtn.textContent="EMİR HAZIRLANIYOR...";
+
     try{
-      const d=await testnetCall("testnet-open",{...p,riskPercent:risk,leverage:lev});
-      $("testnetStatus").textContent=`Açıldı • ${d.symbol} ${d.direction} • ${d.quantity} adet • ${Number(d.notional).toFixed(2)} USDT`;
-      alert(`TESTNET işlem açıldı.\n${d.symbol} ${d.direction}\nMiktar: ${d.quantity}\nSL: ${d.stop}\nTP1: ${d.tp1}\nTP2: ${d.tp2}`);
-      await new Promise(r=>setTimeout(r,800));
+      const confirmed=window.confirm(
+        `BINANCE FUTURES TESTNET\n\n${p.symbol} ${p.direction}\nRisk: %${risk}\nKaldıraç: ${lev}x\nSL: ${p.stop}\nTP1: ${p.tp1}\nTP2: ${p.tp2}\n\nTestnet emri açılsın mı?`
+      );
+      if(!confirmed){
+        $("testnetStatus").textContent="Emir iptal edildi.";
+        return;
+      }
+
+      $("testnetStatus").textContent="Binance Testnet'e emir gönderiliyor...";
+      openBtn.textContent="EMİR GÖNDERİLİYOR...";
+
+      const d=await testnetCall("testnet-open",{
+        symbol:p.symbol,
+        direction:p.direction,
+        stop:p.stop,
+        tp1:p.tp1,
+        tp2:p.tp2,
+        riskPercent:risk,
+        leverage:lev
+      });
+
+      $("testnetStatus").textContent=`✅ Açıldı • ${d.symbol} ${d.direction} • ${d.quantity} adet • ${Number(d.notional).toFixed(2)} USDT`;
+
+      await new Promise(r=>setTimeout(r,1000));
       await refreshTestnetDashboard();
       const posBox=$("testnetPositionsBox");
       if(posBox)posBox.scrollIntoView({behavior:"smooth",block:"start"});
-    }catch(e){$("testnetStatus").textContent="Emir hatası: "+e.message}
-  };
+    }catch(e){
+      $("testnetStatus").textContent="❌ Emir hatası: "+(e?.message||String(e));
+    }finally{
+      openBtn.disabled=false;
+      openBtn.textContent="TESTNET EMRİNİ AÇ";
+    }
+  });
 
   try{
     await refreshTestnetDashboard();
     if(window.__testnetRefreshTimer)clearInterval(window.__testnetRefreshTimer);
     window.__testnetRefreshTimer=setInterval(()=>{
-      if(currentView==="testnetView")refreshTestnetDashboard().catch(()=>{});
+      if(activeAppView==="testnetView")refreshTestnetDashboard().catch(()=>{});
     },5000);
   }catch(e){}
 }
