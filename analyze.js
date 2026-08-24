@@ -355,49 +355,124 @@ export default async function handler(req,res){
   try{
     const symbol=String(req.query.symbol||"BTCUSDT").toUpperCase();
     const requestedInterval=String(req.query.interval||"5m");
-    const interval="5m";
     const profile=getProfile(req.query.profile).name;
-    if(!/^[A-Z0-9]{5,20}$/.test(symbol))return res.status(400).json({error:"Geçersiz sembol."});
-    if(!["1m","3m","5m","15m","1h"].includes(requestedInterval))return res.status(400).json({error:"Geçersiz zaman dilimi."});
+
+    if(!/^[A-Z0-9]{5,20}$/.test(symbol)){
+      return res.status(400).json({error:"Geçersiz sembol."});
+    }
+    if(!["1m","3m","5m","15m","1h"].includes(requestedInterval)){
+      return res.status(400).json({error:"Geçersiz zaman dilimi."});
+    }
+
     const base="https://fapi.binance.com";
-    const [k,k1m,ticker,k15,k1h]=await Promise.all([
+
+    const results=await Promise.all([
       getJson(`${base}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=5m&limit=320`),
       getJson(`${base}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=1m&limit=180`),
-      getJson(`${base}/fapi/v1/ticker/24hr?symbol=${encodeURIComponent(symbol)}`),
       getJson(`${base}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=15m&limit=240`),
-      getJson(`${base}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=1h&limit=240`)
+      getJson(`${base}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=1h&limit=240`),
+      getJson(`${base}/fapi/v1/ticker/24hr?symbol=${encodeURIComponent(symbol)}`)
     ]);
-    const u=unpack(k,true);if(u.c.length<220)return res.status(422).json({error:"Yeterli mum verisi yok."});
-    const d=calcAll(u.o,u.h,u.l,u.c,u.v),n=u.c.length-1;
-    const mtf={m15:tfBiasFromKlines(k15),h1:tfBiasFromKlines(k1h)};
+
+    const marketData={
+      k5m:results[0],
+      k1m:results[1],
+      k15m:results[2],
+      k1h:results[3],
+      ticker:results[4]
+    };
+
+    if(!Array.isArray(marketData.k5m)||!Array.isArray(marketData.k1m)){
+      return res.status(502).json({error:"5m veya 1m Binance mum verisi alınamadı."});
+    }
+
+    const u=unpack(marketData.k5m,true);
+    if(u.c.length<220){
+      return res.status(422).json({error:"Yeterli 5m mum verisi yok."});
+    }
+
+    const d=calcAll(u.o,u.h,u.l,u.c,u.v);
+    const n=u.c.length-1;
+    const mtf={
+      m15:tfBiasFromKlines(marketData.k15m),
+      h1:tfBiasFromKlines(marketData.k1h)
+    };
+
     const legacy=legacyAt(d,u.o,u.h,u.l,u.c,u.v,n,true);
     const advanced=optimizedAt(d,u.o,u.h,u.l,u.c,u.v,n,mtf,profile);
     let common=commonDecision(legacy,advanced);
-    const direction5m=advanced.trend;
-    const micro=direction5m==="LONG"||direction5m==="SHORT"?microTriggerFromKlines(k1m,direction5m):{ok:false,stage:"İZLE",reason:"5m yön net değil",blockers:[]};
 
-    // V11: 5m sadece yön/setup verir. Nihai AL/SAT için 1m tetikleyici zorunlu.
+    const direction5m=advanced.trend;
+    const micro=(direction5m==="LONG"||direction5m==="SHORT")
+      ? microTriggerFromKlines(marketData.k1m,direction5m)
+      : {ok:false,stage:"İZLE",reason:"5m yön net değil",blockers:[]};
+
     if(common.decision!=="BEKLE"&&!micro.ok){
       common={...common,decision:"BEKLE",stage:micro.stage,note:micro.reason};
     }else if(common.decision==="BEKLE"&&direction5m!=="NÖTR"){
       common={...common,stage:micro.stage,note:micro.reason};
     }
-    let levelDecision=common.decision,source="V11 5m YÖN + 1m TETİK";
-    const livePrice=Number(ticker.lastPrice)||u.c[n];
+
+    let levelDecision=common.decision;
+    const livePrice=Number(marketData.ticker?.lastPrice)||u.c[n];
     const levels=smartLevels(d,u.h,u.l,u.c,n,levelDecision,livePrice);
+
     if(levelDecision!=="BEKLE"&&levels.entry==null){
-      common={...common,decision:"BEKLE",stage:"İZLE",note:levels.reason||"V10: giriş kaçtı, yeni retest bekleniyor."};
+      common={
+        ...common,
+        decision:"BEKLE",
+        stage:"İZLE",
+        note:levels.reason||"V11: fiyat girişten kaçtı, yeni 1m retest bekleniyor."
+      };
       levelDecision="BEKLE";
     }
-    levels.source=levels.entry==null?"SEVİYE YOK":source;
+
+    levels.source=levels.entry==null?"SEVİYE YOK":"V11 5m YÖN + 1m TETİK";
+
     res.setHeader("Cache-Control","no-store");
     return res.status(200).json({
-      symbol,interval:"5m+1m",price:livePrice,signalClose:u.c[n],change24:+ticker.priceChangePercent,
-      legacy,advanced,common,levels,
-      v7:{version:"10.0",profile,thresholds:advanced.thresholds,mtf,blockers:advanced.blockers,confirmations:advanced.confirmations,metrics:advanced.metrics},
-      v10:{version:"11.0 Realtime Scalp",trend:advanced.trend,stage:common.stage||micro.stage||advanced.stage,warnings:advanced.warnings,setup:advanced.setup,antiChase:true,minRR:1.5},
-      v11:{version:"11.0",directionTF:"5m",triggerTF:"1m",trend5m:direction5m,microTrigger:micro,requestedInterval},
+      symbol,
+      interval:"5m+1m",
+      price:livePrice,
+      signalClose:u.c[n],
+      change24:Number(marketData.ticker?.priceChangePercent||0),
+      legacy,
+      advanced,
+      common,
+      levels,
+      v7:{
+        version:"11.0.2",
+        profile,
+        thresholds:advanced.thresholds,
+        mtf,
+        blockers:advanced.blockers,
+        confirmations:advanced.confirmations,
+        metrics:advanced.metrics
+      },
+      v10:{
+        version:"11.0.2 Realtime Scalp",
+        trend:advanced.trend,
+        stage:common.stage||micro.stage||advanced.stage,
+        warnings:advanced.warnings,
+        setup:advanced.setup,
+        antiChase:true,
+        minRR:1.5
+      },
+      v11:{
+        version:"11.0.2",
+        directionTF:"5m",
+        triggerTF:"1m",
+        trend5m:direction5m,
+        microTrigger:micro,
+        requestedInterval
+      },
       timestamp:new Date().toISOString()
     });
-  }catch(e){return res.status(500).json({error:e?.message||"Analiz hatası."})}
+  }catch(e){
+    return res.status(500).json({
+      error:e?.message||"Analiz hatası.",
+      engine:"V11.0.2"
+    });
+  }
 }
+
