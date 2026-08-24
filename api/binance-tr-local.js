@@ -361,19 +361,34 @@ async function futSigned(method,path,params={},env){
   return j;
 }
 function decimalsFromStep(step){
-  const s=String(step);
+  const s=String(step).toLowerCase();
+  if(s.includes("e-")){
+    const exp=Number(s.split("e-")[1]||0);
+    const mantissa=s.split("e-")[0];
+    const mantissaDecimals=(mantissa.split(".")[1]||"").length;
+    return Math.max(0,exp+mantissaDecimals);
+  }
   if(!s.includes("."))return 0;
   return s.replace(/0+$/,"").split(".")[1]?.length||0;
 }
+function normalizeDecimal(value,decimals){
+  const n=Number(value);
+  if(!Number.isFinite(n))return n;
+  return Number(n.toFixed(Math.min(16,Math.max(0,decimals))));
+}
 function floorStep(value,step){
-  const st=Number(step);if(!Number.isFinite(st)||st<=0)return Number(value);
-  const n=Math.floor((Number(value)+1e-12)/st)*st;
-  return Number(n.toFixed(decimalsFromStep(step)));
+  const st=Number(step);
+  if(!Number.isFinite(st)||st<=0)return Number(value);
+  const d=decimalsFromStep(step);
+  const units=Math.floor((Number(value)/st)+1e-9);
+  return normalizeDecimal(units*st,d);
 }
 function roundTick(value,tick){
-  const t=Number(tick);if(!Number.isFinite(t)||t<=0)return Number(value);
-  const n=Math.round(Number(value)/t)*t;
-  return Number(n.toFixed(decimalsFromStep(tick)));
+  const t=Number(tick);
+  if(!Number.isFinite(t)||t<=0)return Number(value);
+  const d=decimalsFromStep(tick);
+  const units=Math.round(Number(value)/t);
+  return normalizeDecimal(units*t,d);
 }
 async function testnetSymbolRules(symbol){
   const ex=await futPublic("/fapi/v1/exchangeInfo");
@@ -385,8 +400,8 @@ async function testnetSymbolRules(symbol){
   return {
     minQty:Number(lot?.minQty||0),
     maxQty:Number(lot?.maxQty||1e30),
-    stepSize:Number(lot?.stepSize||1),
-    tickSize:Number(price?.tickSize||0.01),
+    stepSize:String(lot?.stepSize||"1"),
+    tickSize:String(price?.tickSize||"0.01"),
     minNotional:Number(minNot?.notional||5)
   };
 }
@@ -486,6 +501,10 @@ async function testnetOpen(req){
   const roundedStop=roundTick(stop,rules.tickSize);
   const roundedTp1=roundTick(tp1,rules.tickSize);
   const roundedTp2=roundTick(tp2,rules.tickSize);
+
+  if(![roundedStop,roundedTp1,roundedTp2].every(x=>Number.isFinite(x)&&x>0)){
+    throw new Error(`Fiyat hassasiyeti hatası: SL/TP sıfır veya geçersiz oluştu. tickSize=${rules.tickSize}`);
+  }
 
   await futSigned("POST","/fapi/v1/leverage",{symbol,leverage},env);
 
