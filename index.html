@@ -1854,6 +1854,11 @@ async function renderTestnetView(){
     <div id="testnetPositionsBox" class="menu-card">
       <div class="menu-card-title">Açık Pozisyonlar</div>
       <div class="menu-card-sub">Henüz yüklenmedi.</div>
+    </div>
+
+    <div id="testnetOrdersBox" class="menu-card">
+      <div class="menu-card-title">Koruyucu Emirler (SL / TP)</div>
+      <div class="menu-card-sub">Henüz yüklenmedi.</div>
     </div>`;
 
   $("testnetSaveToken").onclick=()=>{
@@ -1863,18 +1868,7 @@ async function renderTestnetView(){
   $("testnetRefresh").onclick=async()=>{
     saveTestnetToken($("testnetTokenInput").value.trim());
     $("testnetStatus").textContent="Testnet hesabı okunuyor...";
-    try{
-      const d=await testnetCall("testnet-account");
-      $("testnetStatus").textContent=`Bağlandı • ${d.oneWayMode?"One-way":"Hedge"} Mode`;
-      $("testnetAccountBox").innerHTML=`
-        <div class="menu-card-title">Hesap</div>
-        <div class="testnet-grid">
-          <div><div class="menu-card-sub">Wallet</div><div class="performance-big">${Number(d.walletBalance).toFixed(2)} USDT</div></div>
-          <div><div class="menu-card-sub">Kullanılabilir</div><div class="performance-big">${Number(d.availableBalance).toFixed(2)} USDT</div></div>
-        </div>
-        <div class="menu-card-sub" style="margin-top:8px">${d.oneWayMode?"✅ One-way Mode uygun.":"⚠️ Hedge Mode açık; emir açmadan önce One-way Mode gerekli."}</div>`;
-      renderTestnetPositions(d.openPositions||[]);
-    }catch(e){$("testnetStatus").textContent="Hata: "+e.message}
+    try{await refreshTestnetDashboard()}catch(e){}
   };
   $("testnetOpenLatest").onclick=async()=>{
     const p=testnetLatestPlan();if(!p.ok){alert(p.msg);return}
@@ -1887,11 +1881,63 @@ async function renderTestnetView(){
       const d=await testnetCall("testnet-open",{...p,riskPercent:risk,leverage:lev});
       $("testnetStatus").textContent=`Açıldı • ${d.symbol} ${d.direction} • ${d.quantity} adet • ${Number(d.notional).toFixed(2)} USDT`;
       alert(`TESTNET işlem açıldı.\n${d.symbol} ${d.direction}\nMiktar: ${d.quantity}\nSL: ${d.stop}\nTP1: ${d.tp1}\nTP2: ${d.tp2}`);
-      const acc=await testnetCall("testnet-account");
-      renderTestnetPositions(acc.openPositions||[]);
+      await new Promise(r=>setTimeout(r,800));
+      await refreshTestnetDashboard();
+      const posBox=$("testnetPositionsBox");
+      if(posBox)posBox.scrollIntoView({behavior:"smooth",block:"start"});
     }catch(e){$("testnetStatus").textContent="Emir hatası: "+e.message}
   };
+
+  try{
+    await refreshTestnetDashboard();
+    if(window.__testnetRefreshTimer)clearInterval(window.__testnetRefreshTimer);
+    window.__testnetRefreshTimer=setInterval(()=>{
+      if(currentView==="testnetView")refreshTestnetDashboard().catch(()=>{});
+    },5000);
+  }catch(e){}
 }
+
+function renderTestnetOrders(rows){
+  const box=$("testnetOrdersBox");if(!box)return;
+  box.innerHTML=`<div class="menu-card-title">Koruyucu Emirler (SL / TP)</div>`+
+    (rows.length?rows.map(x=>`
+      <div class="testnet-pos">
+        <div class="menu-card-row">
+          <div>
+            <strong>${esc(x.symbol)} • ${esc(x.type||"ALGO")}</strong>
+            <div class="menu-card-sub">${esc(x.side||"")} • ${esc(x.algoStatus||"NEW")}</div>
+          </div>
+          <div style="text-align:right">
+            <div>${fmt(x.triggerPrice)}</div>
+            <div class="menu-card-sub">Trigger</div>
+          </div>
+        </div>
+        <div class="menu-card-sub">${x.closePosition?"Pozisyonun kalanını kapatır":`Miktar: ${x.quantity||"-"}`}</div>
+      </div>`).join(""):`<div class="menu-card-sub">Açık SL/TP algo emri yok.</div>`);
+}
+async function refreshTestnetDashboard(){
+  try{
+    const d=await testnetCall("testnet-account");
+    const s=$("testnetStatus");
+    if(s)s.textContent=`Bağlandı • ${d.oneWayMode?"One-way":"Hedge"} Mode • ${new Date().toLocaleTimeString()}`;
+    if($("testnetAccountBox")){
+      $("testnetAccountBox").innerHTML=`
+        <div class="menu-card-title">Hesap</div>
+        <div class="testnet-grid">
+          <div><div class="menu-card-sub">Wallet</div><div class="performance-big">${Number(d.walletBalance).toFixed(2)} USDT</div></div>
+          <div><div class="menu-card-sub">Kullanılabilir</div><div class="performance-big">${Number(d.availableBalance).toFixed(2)} USDT</div></div>
+        </div>
+        <div class="menu-card-sub" style="margin-top:8px">${d.oneWayMode?"✅ One-way Mode uygun.":"⚠️ Hedge Mode açık; emir açmadan önce One-way Mode gerekli."}</div>`;
+    }
+    renderTestnetPositions(d.openPositions||[]);
+    renderTestnetOrders(d.algoOrders||[]);
+    return d;
+  }catch(e){
+    const s=$("testnetStatus"); if(s)s.textContent="Hata: "+e.message;
+    throw e;
+  }
+}
+
 function renderTestnetPositions(rows){
   const box=$("testnetPositionsBox");if(!box)return;
   box.innerHTML=`<div class="menu-card-title">Açık Pozisyonlar</div>`+
@@ -1908,8 +1954,8 @@ function renderTestnetPositions(rows){
     if(!confirm(`${b.dataset.symbol} TESTNET pozisyonu marketten kapatılsın mı?`))return;
     try{
       await testnetCall("testnet-close",{symbol:b.dataset.symbol});
-      const acc=await testnetCall("testnet-account");
-      renderTestnetPositions(acc.openPositions||[]);
+      await new Promise(r=>setTimeout(r,500));
+      await refreshTestnetDashboard();
     }catch(e){alert("Kapatma hatası: "+e.message)}
   });
 }
