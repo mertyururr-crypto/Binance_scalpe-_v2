@@ -1,3 +1,4 @@
+import crypto from "crypto";
 
 function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
 
@@ -316,14 +317,233 @@ async function doScan(body){
   };
 }
 
+
+const FUTURES_TESTNET_BASE="https://testnet.binancefuture.com";
+
+function testnetEnv(){
+  return {
+    apiKey:String(process.env.BINANCE_TESTNET_API_KEY||""),
+    secret:String(process.env.BINANCE_TESTNET_SECRET_KEY||""),
+    appToken:String(process.env.BINANCE_TESTNET_APP_TOKEN||"")
+  };
+}
+function requireTestnetAuth(req){
+  const env=testnetEnv();
+  if(!env.apiKey||!env.secret||!env.appToken){
+    throw new Error("Testnet ayarları eksik. Vercel Environment Variables: BINANCE_TESTNET_API_KEY, BINANCE_TESTNET_SECRET_KEY, BINANCE_TESTNET_APP_TOKEN");
+  }
+  const token=String(req.headers["x-app-token"]||"");
+  if(!token||token!==env.appToken)throw new Error("Testnet uygulama erişim kodu yanlış.");
+  return env;
+}
+async function futPublic(path,params={}){
+  const q=new URLSearchParams();
+  Object.entries(params).forEach(([k,v])=>{if(v!==undefined&&v!==null&&v!=="")q.set(k,String(v))});
+  const url=FUTURES_TESTNET_BASE+path+(q.toString()?`?${q.toString()}`:"");
+  const r=await fetch(url,{headers:{accept:"application/json"}});
+  const text=await r.text();
+  let j;try{j=JSON.parse(text)}catch{throw new Error(`Binance Testnet JSON hatası • HTTP ${r.status}`)}
+  if(!r.ok||Number(j?.code)<0)throw new Error(j?.msg||`Binance Testnet HTTP ${r.status}`);
+  return j;
+}
+async function futSigned(method,path,params={},env){
+  const q=new URLSearchParams();
+  Object.entries(params).forEach(([k,v])=>{if(v!==undefined&&v!==null&&v!=="")q.set(k,String(v))});
+  q.set("recvWindow","5000");
+  q.set("timestamp",String(Date.now()));
+  const payload=q.toString();
+  const sig=crypto.createHmac("sha256",env.secret).update(payload).digest("hex");
+  const url=`${FUTURES_TESTNET_BASE}${path}?${payload}&signature=${sig}`;
+  const r=await fetch(url,{method,headers:{"X-MBX-APIKEY":env.apiKey,accept:"application/json"}});
+  const text=await r.text();
+  let j;try{j=JSON.parse(text)}catch{throw new Error(`Binance Testnet cevap hatası • HTTP ${r.status}`)}
+  if(!r.ok||Number(j?.code)<0)throw new Error(j?.msg||`Binance Testnet HTTP ${r.status}`);
+  return j;
+}
+function decimalsFromStep(step){
+  const s=String(step);
+  if(!s.includes("."))return 0;
+  return s.replace(/0+$/,"").split(".")[1]?.length||0;
+}
+function floorStep(value,step){
+  const st=Number(step);if(!Number.isFinite(st)||st<=0)return Number(value);
+  const n=Math.floor((Number(value)+1e-12)/st)*st;
+  return Number(n.toFixed(decimalsFromStep(step)));
+}
+function roundTick(value,tick){
+  const t=Number(tick);if(!Number.isFinite(t)||t<=0)return Number(value);
+  const n=Math.round(Number(value)/t)*t;
+  return Number(n.toFixed(decimalsFromStep(tick)));
+}
+async function testnetSymbolRules(symbol){
+  const ex=await futPublic("/fapi/v1/exchangeInfo");
+  const s=ex.symbols?.find(x=>x.symbol===symbol);
+  if(!s)throw new Error("Testnet sembolü bulunamadı.");
+  const lot=s.filters?.find(x=>x.filterType==="MARKET_LOT_SIZE")||s.filters?.find(x=>x.filterType==="LOT_SIZE");
+  const price=s.filters?.find(x=>x.filterType==="PRICE_FILTER");
+  const minNot=s.filters?.find(x=>x.filterType==="MIN_NOTIONAL");
+  return {
+    minQty:Number(lot?.minQty||0),
+    maxQty:Number(lot?.maxQty||1e30),
+    stepSize:Number(lot?.stepSize||1),
+    tickSize:Number(price?.tickSize||0.01),
+    minNotional:Number(minNot?.notional||5)
+  };
+}
+async function testnetAccount(req){
+  const env=requireTestnetAuth(req);
+  const [balances,positions,mode,orders]=await Promise.all([
+    futSigned("GET","/fapi/v2/balance",{},env),
+    futSigned("GET","/fapi/v2/positionRisk",{},env),
+    futSigned("GET","/fapi/v1/positionSide/dual",{},env),
+    futSigned("GET","/fapi/v1/openOrders",{},env)
+  ]);
+  const usdt=balances.find(x=>x.asset==="USDT")||{};
+  const openPositions=positions.filter(x=>Math.abs(Number(x.positionAmt||0))>0).map(x=>({
+    symbol:x.symbol,
+    positionAmt:Number(x.positionAmt),
+    entryPrice:Number(x.entryPrice),
+    markPrice:Number(x.markPrice),
+    unrealizedProfit:Number(x.unRealizedProfit),
+    leverage:Number(x.leverage),
+    liquidationPrice:Number(x.liquidationPrice)
+  }));
+  return {
+    testnet:true,
+    oneWayMode:!Boolean(mode?.dualSidePosition),
+    walletBalance:Number(usdt.balance||0),
+    availableBalance:Number(usdt.availableBalance||0),
+    openPositions,
+    openOrders:(orders||[]).map(x=>({symbol:x.symbol,orderId:x.orderId,type:x.type,side:x.side,stopPrice:Number(x.stopPrice||0),origQty:Number(x.origQty||0),status:x.status}))
+  };
+}
+async function emergencyCloseSymbol(symbol,positionAmt,env){
+  try{await futSigned("DELETE","/fapi/v1/allOpenOrders",{symbol},env)}catch(e){}
+  if(!positionAmt)return;
+  const side=Number(positionAmt)>0?"SELL":"BUY";
+  const rules=await testnetSymbolRules(symbol);
+  const qty=floorStep(Math.abs(Number(positionAmt)),rules.stepSize);
+  if(qty>0){
+    try{await futSigned("POST","/fapi/v1/order",{symbol,side,type:"MARKET",quantity:qty,reduceOnly:"true",newOrderRespType:"RESULT"},env)}catch(e){}
+  }
+}
+async function testnetOpen(req){
+  const env=requireTestnetAuth(req);
+  const body=req.body||{};
+  const symbol=String(body.symbol||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+  const direction=String(body.direction||"").toUpperCase();
+  const riskPct=Math.max(.1,Math.min(2,Number(body.riskPercent)||.5));
+  const leverage=Math.max(1,Math.min(20,Math.round(Number(body.leverage)||5)));
+  const stop=Number(body.stop),tp1=Number(body.tp1),tp2=Number(body.tp2);
+  if(!/^[A-Z0-9]{5,20}$/.test(symbol))throw new Error("Geçersiz sembol.");
+  if(!["LONG","SHORT"].includes(direction))throw new Error("Yön LONG veya SHORT olmalı.");
+  if(![stop,tp1,tp2].every(Number.isFinite))throw new Error("SL/TP seviyeleri eksik.");
+
+  const mode=await futSigned("GET","/fapi/v1/positionSide/dual",{},env);
+  if(Boolean(mode?.dualSidePosition))throw new Error("İlk sürüm yalnızca One-way Mode destekliyor. Binance Futures Testnet'te Position Mode'u One-way yap.");
+
+  const existing=await futSigned("GET","/fapi/v2/positionRisk",{symbol},env);
+  const current=Array.isArray(existing)?existing.find(x=>x.symbol===symbol):null;
+  if(Math.abs(Number(current?.positionAmt||0))>0)throw new Error(`${symbol} için zaten açık pozisyon var.`);
+
+  const [balances,markInfo,rules]=await Promise.all([
+    futSigned("GET","/fapi/v2/balance",{},env),
+    futPublic("/fapi/v1/premiumIndex",{symbol}),
+    testnetSymbolRules(symbol)
+  ]);
+  const usdt=balances.find(x=>x.asset==="USDT")||{};
+  const available=Number(usdt.availableBalance||0);
+  const mark=Number(markInfo.markPrice);
+  if(!Number.isFinite(mark)||mark<=0)throw new Error("Mark price alınamadı.");
+
+  if(direction==="LONG" && !(stop<mark&&tp1>mark&&tp2>mark))throw new Error("LONG için SL fiyatın altında, hedefler fiyatın üstünde olmalı.");
+  if(direction==="SHORT" && !(stop>mark&&tp1<mark&&tp2<mark))throw new Error("SHORT için SL fiyatın üstünde, hedefler fiyatın altında olmalı.");
+
+  const riskUsd=available*(riskPct/100);
+  const stopDistance=Math.abs(mark-stop);
+  if(stopDistance<=0)throw new Error("Stop mesafesi geçersiz.");
+
+  let qty=riskUsd/stopDistance;
+  const maxNotional=Math.min(10000,available*leverage*.95);
+  qty=Math.min(qty,maxNotional/mark);
+  qty=floorStep(qty,rules.stepSize);
+  if(qty<rules.minQty)throw new Error("Hesaplanan miktar minimum emir miktarının altında.");
+  if(qty*mark<rules.minNotional)throw new Error(`Emir nominali minimum ${rules.minNotional} USDT altında.`);
+
+  const roundedStop=roundTick(stop,rules.tickSize);
+  const roundedTp1=roundTick(tp1,rules.tickSize);
+  const roundedTp2=roundTick(tp2,rules.tickSize);
+
+  await futSigned("POST","/fapi/v1/leverage",{symbol,leverage},env);
+
+  const entrySide=direction==="LONG"?"BUY":"SELL";
+  const exitSide=direction==="LONG"?"SELL":"BUY";
+  let entryOrder=null;
+  try{
+    entryOrder=await futSigned("POST","/fapi/v1/order",{
+      symbol,side:entrySide,type:"MARKET",quantity:qty,newOrderRespType:"RESULT"
+    },env);
+
+    const executedQty=floorStep(Number(entryOrder.executedQty||qty),rules.stepSize);
+    const halfQty=floorStep(executedQty*.5,rules.stepSize);
+
+    const protective=[];
+    protective.push(await futSigned("POST","/fapi/v1/order",{
+      symbol,side:exitSide,type:"STOP_MARKET",stopPrice:roundedStop,closePosition:"true",workingType:"MARK_PRICE"
+    },env));
+
+    if(halfQty>=rules.minQty && halfQty*mark>=rules.minNotional){
+      protective.push(await futSigned("POST","/fapi/v1/order",{
+        symbol,side:exitSide,type:"TAKE_PROFIT_MARKET",stopPrice:roundedTp1,quantity:halfQty,reduceOnly:"true",workingType:"MARK_PRICE"
+      },env));
+    }
+
+    protective.push(await futSigned("POST","/fapi/v1/order",{
+      symbol,side:exitSide,type:"TAKE_PROFIT_MARKET",stopPrice:roundedTp2,closePosition:"true",workingType:"MARK_PRICE"
+    },env));
+
+    return {
+      testnet:true,symbol,direction,leverage,riskPercent:riskPct,riskUsd,
+      markPrice:mark,quantity:executedQty,notional:executedQty*mark,
+      stop:roundedStop,tp1:roundedTp1,tp2:roundedTp2,
+      entryOrder,protectiveOrders:protective
+    };
+  }catch(e){
+    if(entryOrder){
+      try{
+        const pos=await futSigned("GET","/fapi/v2/positionRisk",{symbol},env);
+        const p=Array.isArray(pos)?pos.find(x=>x.symbol===symbol):null;
+        await emergencyCloseSymbol(symbol,Number(p?.positionAmt||0),env);
+      }catch(_){}
+      throw new Error(`Koruyucu emir kurulamadı; pozisyon kapatılmaya çalışıldı. ${e.message}`);
+    }
+    throw e;
+  }
+}
+async function testnetClose(req){
+  const env=requireTestnetAuth(req);
+  const symbol=String(req.body?.symbol||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+  if(!symbol)throw new Error("Sembol gerekli.");
+  const pos=await futSigned("GET","/fapi/v2/positionRisk",{symbol},env);
+  const p=Array.isArray(pos)?pos.find(x=>x.symbol===symbol):null;
+  const amt=Number(p?.positionAmt||0);
+  await emergencyCloseSymbol(symbol,amt,env);
+  return {testnet:true,symbol,closed:true,previousPositionAmt:amt};
+}
+
 export default async function handler(req,res){
   try{
-    if(req.method!=="POST")return res.status(405).json({error:"POST gerekli."});
     const action=String(req.query.action||req.body?.action||"");
+    if(["analyze","backtest","scan","testnet-account","testnet-open","testnet-close"].includes(action) && req.method!=="POST"){
+      return res.status(405).json({error:"POST gerekli."});
+    }
     let result;
     if(action==="analyze")result=await doAnalyze(req.body||{});
     else if(action==="backtest")result=await doBacktest(req.body||{});
     else if(action==="scan")result=await doScan(req.body||{});
+    else if(action==="testnet-account")result=await testnetAccount(req);
+    else if(action==="testnet-open")result=await testnetOpen(req);
+    else if(action==="testnet-close")result=await testnetClose(req);
     else return res.status(400).json({error:"Geçersiz action."});
     res.setHeader("Cache-Control","no-store");
     return res.status(200).json(result);
