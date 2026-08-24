@@ -260,58 +260,106 @@ function commonDecision(legacy,advanced){
   return {decision,confidence,note,trend:advanced.trend,stage:advanced.stage}
 }
 
-function microTriggerFromKlines(k1m, direction){
-  if(!Array.isArray(k1m)||k1m.length<80)return {ok:false,stage:"İZLE",reason:"1m veri yetersiz"};
+function v11DirectionEligible(advanced,profileName="balanced"){
+  const cfg=getProfile(profileName);
+  const mode=cfg.name;
+  const score=Number(advanced.score||50);
+  const trend=advanced.trend||"NÖTR";
+  const hard=(advanced.blockers||[]).filter(x=>
+    /Volatilite aşırı|Anormal büyük mum|GEÇ KALINDI|PUMP KOVALAMA|DUMP KOVALAMA|15m \+ 1h/.test(String(x))
+  );
+
+  if(hard.length)return {ok:false,direction:trend,reason:hard[0]};
+
+  if(mode==="safe"){
+    const ok=advanced.signal==="LONG"||advanced.signal==="SHORT";
+    return {ok,direction:ok?advanced.signal:trend,reason:ok?"5m Güvenli setup hazır":"5m güvenli retest/setup bekleniyor"};
+  }
+
+  const longMin=mode==="fast"?66:71;
+  const shortMax=mode==="fast"?34:29;
+  const minConf=mode==="fast"?2:3;
+
+  if(trend==="LONG"&&score>=longMin&&(advanced.confirmations||0)>=minConf){
+    return {ok:true,direction:"LONG",reason:`5m ${mode==="fast"?"Hızlı":"Dengeli"} LONG yön hazır`};
+  }
+  if(trend==="SHORT"&&score<=shortMax&&(advanced.confirmations||0)>=minConf){
+    return {ok:true,direction:"SHORT",reason:`5m ${mode==="fast"?"Hızlı":"Dengeli"} SHORT yön hazır`};
+  }
+  return {ok:false,direction:trend,reason:"5m yön/skor henüz yeterli değil"};
+}
+function microTriggerFromKlines(k1m,direction,profileName="balanced"){
+  if(!Array.isArray(k1m)||k1m.length<80)return {ok:false,stage:"İZLE",reason:"1m veri yetersiz",criteria:{passed:0,total:4}};
+  const cfg=getProfile(profileName);
+  const mode=cfg.name;
   const u=unpack(k1m,true);
   const d=calcAll(u.o,u.h,u.l,u.c,u.v);
   const n=u.c.length-1;
-  if(n<30)return {ok:false,stage:"İZLE",reason:"1m veri yetersiz"};
+  if(n<30)return {ok:false,stage:"İZLE",reason:"1m veri yetersiz",criteria:{passed:0,total:4}};
+
   const a=d.atrV[n]||Math.max(u.c[n]*.0025,1e-12);
   const range=Math.max(u.h[n]-u.l[n],1e-12);
   const lowerWick=Math.max(0,Math.min(u.o[n],u.c[n])-u.l[n]);
   const upperWick=Math.max(0,u.h[n]-Math.max(u.o[n],u.c[n]));
   const closePos=(u.c[n]-u.l[n])/range;
-  const rsi=d.r[n];
+  const rsi=Number(d.r[n]||50);
   const rv=d.vma[n]?u.v[n]/d.vma[n]:1;
   const dist=(u.c[n]-d.e20[n])/a;
   const move2=(u.c[n]-u.c[Math.max(0,n-2)])/a;
   const histSlope=d.hist[n]-d.hist[Math.max(0,n-2)];
 
-  const longRetest=u.l[n]<=d.e20[n]+.12*a && u.c[n]>=d.e20[n] && closePos>=.60;
-  const shortRetest=u.h[n]>=d.e20[n]-.12*a && u.c[n]<=d.e20[n] && closePos<=.40;
-  const longReject=(lowerWick/range>=.22 || u.c[n]>u.o[n]) && closePos>=.60;
-  const shortReject=(upperWick/range>=.22 || u.c[n]<u.o[n]) && closePos<=.40;
+  const retestTol=mode==="fast"?.22:mode==="safe"?.10:.16;
+  const closeNeed=mode==="fast"?.55:mode==="safe"?.64:.59;
+  const volNeed=mode==="fast"?.55:mode==="safe"?.82:.68;
+  const maxDist=mode==="fast"?.78:mode==="safe"?.48:.62;
 
+  const longRetest=u.l[n]<=d.e20[n]+retestTol*a && u.c[n]>=d.e20[n]-.03*a;
+  const shortRetest=u.h[n]>=d.e20[n]-retestTol*a && u.c[n]<=d.e20[n]+.03*a;
+
+  const longReject=((lowerWick/range)>=.18 || u.c[n]>u.o[n]) && closePos>=closeNeed;
+  const shortReject=((upperWick/range)>=.18 || u.c[n]<u.o[n]) && closePos<=1-closeNeed;
+
+  const longMomentum=histSlope>=0 && rsi>=40 && rsi<=72;
+  const shortMomentum=histSlope<=0 && rsi>=28 && rsi<=60;
+  const volumeOk=rv>=volNeed;
+
+  const criteria=direction==="LONG"
+    ? {retest:longRetest,rejection:longReject,momentum:longMomentum,volume:volumeOk}
+    : {retest:shortRetest,rejection:shortReject,momentum:shortMomentum,volume:volumeOk};
+
+  const passed=Object.values(criteria).filter(Boolean).length;
+  const needed=mode==="safe"?4:3;
+
+  // Hard blockers are NEVER relaxed, even in HIZLI.
   const blockers=[];
-  if(rv<.65)blockers.push("1m hacim zayıf");
-  if(direction==="LONG"&&rsi>72)blockers.push("1m RSI yüksek");
-  if(direction==="SHORT"&&rsi<28)blockers.push("1m RSI düşük");
-  if(direction==="LONG"&&dist>.60)blockers.push("1m giriş kaçtı");
-  if(direction==="SHORT"&&dist<-.60)blockers.push("1m giriş kaçtı");
-  if(direction==="LONG"&&move2>1.05&&!longRetest)blockers.push("1m pump kovalanmıyor");
-  if(direction==="SHORT"&&move2<-1.05&&!shortRetest)blockers.push("1m dump kovalanmıyor");
+  if(direction==="LONG"&&rsi>72)blockers.push("1m RSI aşırı yüksek");
+  if(direction==="SHORT"&&rsi<28)blockers.push("1m RSI aşırı düşük");
+  if(direction==="LONG"&&dist>maxDist)blockers.push("1m fiyat girişten kaçtı");
+  if(direction==="SHORT"&&dist<-maxDist)blockers.push("1m fiyat girişten kaçtı");
+  if(direction==="LONG"&&move2>1.15&&!longRetest)blockers.push("1m pump kovalanmıyor");
+  if(direction==="SHORT"&&move2<-1.15&&!shortRetest)blockers.push("1m dump kovalanmıyor");
 
-  let ok=false,stage="İZLE",reason="1m tetikleyici bekleniyor";
-  if(direction==="LONG"){
-    if(longRetest)stage="HAZIR";
-    ok=longRetest&&longReject&&histSlope>=0&&rsi>=43&&rsi<=72&&rv>=.65&&!blockers.length;
-    if(ok){stage="AL";reason="1m retest + alım tepkisi teyit edildi"}
-    else if(stage==="HAZIR")reason="1m retest var, kapanış/momentum teyidi bekleniyor";
-  }else if(direction==="SHORT"){
-    if(shortRetest)stage="HAZIR";
-    ok=shortRetest&&shortReject&&histSlope<=0&&rsi>=28&&rsi<=57&&rv>=.65&&!blockers.length;
-    if(ok){stage="SAT";reason="1m retest + satış tepkisi teyit edildi"}
-    else if(stage==="HAZIR")reason="1m retest var, kapanış/momentum teyidi bekleniyor";
+  const ok=passed>=needed&&!blockers.length;
+  let stage="İZLE";
+  let reason=`1m teyit ${passed}/4 • ${needed}/4 gerekli`;
+
+  if(ok){
+    stage=direction==="LONG"?"AL":"SAT";
+    reason=`1m ${passed}/4 teyit tamam • ${mode==="fast"?"Hızlı":mode==="safe"?"Güvenli":"Dengeli"} giriş`;
+  }else if(passed>=needed-1&&!blockers.length){
+    stage="HAZIR";
+    reason=`1m ${passed}/4 teyit • 1 kriter daha bekleniyor`;
+  }else if(blockers.length){
+    reason=blockers[0];
   }
 
   return {
-    ok,stage,reason,blockers,
-    price:u.c[n],
+    ok,stage,reason,blockers,price:u.c[n],
+    criteria:{...criteria,passed,total:4,needed},
     metrics:{rsi,rv,distEma20Atr:dist,move2Atr:move2,histSlope,closePos},
     setup:{longRetest,shortRetest,longReject,shortReject}
   };
 }
-
 function smartLevels(d,h,l,c,n,decision,currentPrice=null){
   const signalPrice=c[n];
   const market=Number.isFinite(+currentPrice)&&+currentPrice>0?+currentPrice:signalPrice;
@@ -388,11 +436,17 @@ async function doAnalyze(body){
   const legacy=legacyAt(d,u.o,u.h,u.l,u.c,u.v,n,true);
   const advanced=optimizedAt(d,u.o,u.h,u.l,u.c,u.v,n,mtf,profile);
   let common=commonDecision(legacy,advanced);
-  const direction5m=advanced.trend;
-  const micro=direction5m==="LONG"||direction5m==="SHORT"?microTriggerFromKlines(k1m,direction5m):{ok:false,stage:"İZLE",reason:"5m yön net değil",blockers:[]};
-  if(common.decision!=="BEKLE"&&!micro.ok)common={...common,decision:"BEKLE",stage:micro.stage,note:micro.reason};
-  else if(common.decision==="BEKLE"&&direction5m!=="NÖTR")common={...common,stage:micro.stage,note:micro.reason};
-  let levelDecision=common.decision,source="V11 5m YÖN + 1m TETİK";
+  const eligible=v11DirectionEligible(advanced,profile);
+  const direction5m=eligible.direction;
+  const micro=eligible.ok&&(direction5m==="LONG"||direction5m==="SHORT")
+    ?microTriggerFromKlines(k1m,direction5m,profile)
+    :{ok:false,stage:"İZLE",reason:eligible.reason,blockers:[],criteria:{passed:0,total:4,needed:profile==="safe"?4:3}};
+  if(eligible.ok&&micro.ok){
+    common={...common,decision:direction5m==="LONG"?"LONG":"SHORT",stage:direction5m==="LONG"?"AL":"SAT",note:`${eligible.reason} • ${micro.reason}`};
+  }else{
+    common={...common,decision:"BEKLE",stage:micro.stage,note:micro.reason};
+  }
+  let levelDecision=common.decision,source="V11.1 5m YÖN + 1m TETİK";
   const livePrice=Number(k[k.length-1]?.[4])||u.c[n];
   const levels=smartLevels(d,u.h,u.l,u.c,n,levelDecision,livePrice);
   levels.source=levels.entry==null?"SEVİYE YOK":source;
@@ -403,8 +457,8 @@ async function doAnalyze(body){
     symbol,displaySymbol:symbol,interval:"5m+1m",exchange:"binancetr",marketType:"SPOT",quoteAsset:"TRY",
     interval,price:livePrice,signalClose:u.c[n],change24,legacy,advanced,common,levels,
     v7:{version:"10.0-TR",profile,thresholds:advanced.thresholds,mtf,blockers:advanced.blockers,confirmations:advanced.confirmations,metrics:advanced.metrics},
-    v10:{version:"11.0 Realtime Scalp",trend:advanced.trend,stage:common.stage||micro.stage||advanced.stage,warnings:advanced.warnings,setup:advanced.setup,antiChase:true,minRR:1.5},
-    v11:{version:"11.0",directionTF:"5m",triggerTF:"1m",trend5m:direction5m,microTrigger:micro},
+    v10:{version:"11.1 Live Scalp",trend:advanced.trend,stage:common.stage||micro.stage||advanced.stage,warnings:advanced.warnings,setup:advanced.setup,antiChase:true,minRR:1.5},
+    v11:{version:"11.1",directionTF:"5m",triggerTF:"1m",trend5m:direction5m,microTrigger:micro},
     dataSource:"Binance TR resmi API • proxy üzerinden",
     timestamp:new Date().toISOString()
   };
