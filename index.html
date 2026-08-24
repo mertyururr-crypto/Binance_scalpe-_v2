@@ -539,7 +539,9 @@ body.margex-mode .exchange-warning{display:block}
 .scalp-simple-btn{min-height:38px;border:0;border-radius:9px;background:transparent;color:var(--muted);font-size:11px;font-weight:900}
 .scalp-simple-btn.active{background:var(--yellow);color:#111}
 .scalp-simple-help{font-size:10px;color:var(--muted);margin-top:5px;line-height:1.4}
-.backtest-main{display:block!important;background:var(--panel);color:var(--text);border:1px solid var(--border)}
+.backtest-main{background:var(--panel);color:var(--text);border:1px solid var(--border)}
+body:not(.pro-mode) .backtest-main{display:none!important}
+body.pro-mode .backtest-main{display:block!important}
 
 
 .testnet-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid var(--yellow);border-radius:999px;color:var(--yellow);font-size:10px;font-weight:900}
@@ -558,6 +560,8 @@ body.margex-mode .exchange-warning{display:block}
 #testnetOpenLatest:not(:disabled){background:var(--yellow)!important;color:#101216!important;border-color:var(--yellow)!important}
 #testnetOpenLatest:disabled{opacity:.55;cursor:not-allowed}
 
+
+.exchange-warning:empty{display:none!important}
 </style></head>
 <body>
 <div id="menuOverlay" class="menu-overlay" aria-hidden="true">
@@ -571,13 +575,13 @@ body.margex-mode .exchange-warning{display:block}
       <button class="menu-item" type="button" data-view="recentView"><span>🕘 Son Sinyaller</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="notificationsView"><span>🔔 Bildirimler</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="settingsView"><span>⚙️ Ayarlar</span><span>›</span></button>
-      <button class="menu-item" type="button" data-view="chartsView"><span>📊 Grafik</span><span>›</span></button>
-      <div class="menu-section-label pro-only">PRO ARAÇLAR</div>
+      <button class="menu-item pro-only" type="button" data-view="chartsView"><span>📊 Grafik</span><span>›</span></button>
+      <div class="menu-section-label pro-only">⚙️ PRO ARAÇLAR</div>
       <button class="menu-item pro-only" type="button" data-view="performanceView"><span>📈 Ayrıntılı İstatistikler</span><span>›</span></button>
       <button class="menu-item pro-only" type="button" data-view="optimizerView"><span>🧪 Sinyal Motoru Ayarı</span><span>›</span></button>
       <button class="menu-item pro-only" type="button" data-view="riskView"><span>🧮 Pozisyon Hesabı</span><span>›</span></button>
-      <button class="menu-item" type="button" data-view="advancedInfoView"><span>🛠️ Gelişmiş Bilgiler</span><span>›</span></button>
-      <button class="menu-item" type="button" data-view="paperView"><span>🎮 Demo İşlem</span><span>›</span></button>
+      <button class="menu-item pro-only" type="button" data-view="advancedInfoView"><span>🛠️ Gelişmiş Bilgiler</span><span>›</span></button>
+      <button class="menu-item pro-only" type="button" data-view="paperView"><span>🎮 Demo İşlem</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="testnetView"><span>🧪 Binance Futures Testnet</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="signalsView"><span>📚 İşlem Geçmişi</span><span>›</span></button>
     </div>
@@ -603,24 +607,23 @@ body.margex-mode .exchange-warning{display:block}
   <button id="simpleModeBtn" class="mode-btn active" type="button">🙂 BASİT MOD</button>
   <button id="proModeBtn" class="mode-btn" type="button">⚙️ PRO MOD</button>
 </div>
-<div id="modeDescription" class="mode-description">Yeni başlayanlar için sade AL / SAT / BEKLE görünümü</div>
+<div id="modeDescription" class="mode-description">Sadece karar, giriş, stop ve hedefler</div>
 <div class="card easy-hero">
   <h1 class="easy-title">Kolay Trade Sinyali</h1>
-  <div class="easy-sub">Pariteyi seç, tek tuşla sonucu gör. Teknik detayları bilmeden AL / SAT / BEKLE kararını ve işlem planını takip edebilirsin.</div>
+  <div class="easy-sub">Pariteyi seç ve sinyali gör. Basit Mod yalnızca karar, giriş, stop ve hedefleri gösterir.</div>
   <div class="pro-summary">
-    Pro Mod aktif: V7.1 sinyal motoru, teknik skorlar, çoklu zaman teyidi, backtest ve gelişmiş risk/performans ekranları görünür.
+    Pro Mod aktif: teknik skorlar, çoklu zaman teyidi, backtest, optimizasyon ve gelişmiş risk/performans araçları görünür.
   </div>
   <div class="exchange-row">
     <select id="exchangeSelect" class="exchange-select" aria-label="Borsa seçimi">
       <option value="binance">Binance Futures</option>
-      <option value="margex">Margex</option>
       <option value="binancetr">Binance TR — Spot</option>
     </select>
     <div>
       <div id="exchangeInfo" class="exchange-info">
         <span class="exchange-pill"><strong>Veri:</strong> Binance Futures</span>
       </div>
-      <div id="exchangeWarning" class="exchange-warning">Margex açık mum API'si sunmadığı için teknik sinyal, eşleşen coin için Binance Futures referans mumlarından hesaplanır. Ücret ve kaldıraç bilgileri Margex koşullarına göre gösterilir.</div>
+      <div id="exchangeWarning" class="exchange-warning"></div>
     </div>
   </div>
   <div class="scalp-simple-wrap">
@@ -636,7 +639,7 @@ body.margex-mode .exchange-warning{display:block}
     <div class="picker"><input id="symbol" value="1000PEPEUSDT" placeholder="Parite ara..."><div id="list" class="list"></div></div>
     <select id="interval"><option>1m</option><option>3m</option><option selected>5m</option><option>15m</option><option>1h</option></select>
     <button id="analyze" class="primary-action">SİNYALİ GÖSTER</button>
-    <button id="backtest" class="secondary backtest-main">BACKTEST</button>
+    <button id="backtest" class="secondary backtest-main pro-only">BACKTEST</button>
   </div>
   <div id="favorites" class="favorites"></div>
   <div class="scanner">
@@ -776,6 +779,7 @@ let appSettings=loadJSON("bsa_settings",{
 });
 appSettings.whitelist=Array.isArray(appSettings.whitelist)?appSettings.whitelist:[];
 appSettings.blacklist=Array.isArray(appSettings.blacklist)?appSettings.blacklist:[];
+if(appSettings.selectedExchange==="margex")appSettings.selectedExchange="binance";
 let latestAnalysis=null;
 let recentAnalyses=loadJSON("bsa_recent",[]);
 let signalHistory=loadJSON("bsa_signals",[]);
@@ -1300,7 +1304,7 @@ function setAppMode(mode,save=true){
   if(desc){
     desc.textContent=pro
       ?"Gelişmiş analiz, backtest ve profesyonel araçlar açık"
-      :"Yeni başlayanlar için sade AL / SAT / BEKLE görünümü";
+      :"Sadece karar, giriş, stop ve hedefler";
   }
   if(save){
     try{localStorage.setItem("bsa_app_mode",pro?"pro":"simple")}catch(e){}
