@@ -1855,6 +1855,18 @@ async function renderTestnetView(){
     <div class="menu-card">
       <div class="menu-card-title">Sinyalden Testnet İşlemi</div>
       <div class="menu-card-sub">${plan.ok?`${esc(plan.symbol)} • ${esc(plan.direction)} • SL ${fmt(plan.stop)} • TP1 ${fmt(plan.tp1)} • TP2 ${fmt(plan.tp2)}`:esc(plan.msg)}</div>
+      <div class="seg" id="testnetEntryType">
+        <button type="button" class="active" data-entrytype="market">PİYASA</button>
+        <button type="button" data-entrytype="limit">LİMİT FİYAT</button>
+      </div>
+      <div id="testnetLimitEntryFields" style="display:none">
+        <div class="testnet-field">
+          <label>GİRİŞ FİYATI</label>
+          <input id="testnetEntryPrice" type="number" step="any" value="${latestAnalysis?.price||""}" placeholder="Örn. 185.50">
+        </div>
+        <div class="menu-card-sub" style="margin-top:6px">LONG için mevcut fiyatın altında, SHORT için mevcut fiyatın üstünde limit giriş seç.</div>
+      </div>
+
       <div class="seg" id="testnetPositionMode">
         <button type="button" class="active" data-posmode="risk">RİSK %</button>
         <button type="button" data-posmode="fixed">SABİT USDT</button>
@@ -1889,10 +1901,26 @@ async function renderTestnetView(){
       <div class="menu-card-sub">Henüz yüklenmedi.</div>
     </div>
 
+    <div id="testnetPendingOrdersBox" class="menu-card">
+      <div class="menu-card-title">Bekleyen Giriş Emirleri</div>
+      <div class="menu-card-sub">Henüz yüklenmedi.</div>
+    </div>
+
     <div id="testnetOrdersBox" class="menu-card">
       <div class="menu-card-title">Koruyucu Emirler (SL / TP)</div>
       <div class="menu-card-sub">Henüz yüklenmedi.</div>
     </div>`;
+
+  let testnetEntryType="market";
+  const entryModeBox=$("testnetEntryType");
+  const entryFields=$("testnetLimitEntryFields");
+  entryModeBox.querySelectorAll("[data-entrytype]").forEach(btn=>btn.onclick=()=>{
+    testnetEntryType=btn.dataset.entrytype;
+    entryModeBox.querySelectorAll("[data-entrytype]").forEach(x=>x.classList.toggle("active",x===btn));
+    entryFields.style.display=testnetEntryType==="limit"?"block":"none";
+    if(testnetEntryType==="limit" && !$("testnetEntryPrice").value && latestAnalysis?.price)$("testnetEntryPrice").value=latestAnalysis.price;
+    updateTestnetOrderPreview();
+  });
 
   let testnetPositionMode="risk";
   const modeBox=$("testnetPositionMode");
@@ -1904,14 +1932,15 @@ async function renderTestnetView(){
     const lev=testnetPositionMode==="fixed"?Number($("testnetLevFixed").value):Number($("testnetLev").value);
     if(testnetPositionMode==="fixed"){
       const usdt=Math.max(0,Number($("testnetFixedUsdt").value)||0);
-      const px=Number(plan?.symbol&&latestAnalysis?.price||latestAnalysis?.signalClose||0);
+      const px=Number(testnetEntryType==="limit"?$("testnetEntryPrice").value:(plan?.symbol&&latestAnalysis?.price||latestAnalysis?.signalClose||0));
       const estQty=px>0?usdt/px:null;
       preview.textContent=usdt>0
         ? `Yaklaşık giriş: ${px?fmt(px):"-"} • Pozisyon: ${usdt.toFixed(2)} USDT • ${lev}x • Tahmini teminat: ${(usdt/lev).toFixed(2)} USDT${estQty?` • Yaklaşık ${estQty.toFixed(estQty<1?6:estQty<100?4:2)} ${String(plan?.symbol||"").replace(/USDT$/,"")}`:""}`
         : "Sabit USDT tutarı gir.";
     }else{
       const risk=Number($("testnetRisk").value)||0;
-      preview.textContent=`Risk bazlı hesap • Risk %${risk} • ${lev}x • Kesin coin miktarı emir anında backend tarafından hesaplanır.`;
+      const ep=Number(testnetEntryType==="limit"?$("testnetEntryPrice").value:(latestAnalysis?.price||latestAnalysis?.signalClose||0));
+      preview.textContent=`${testnetEntryType==="limit"?`Limit giriş: ${ep?fmt(ep):"-"} • `:"Piyasa girişi • "}Risk bazlı hesap • Risk %${risk} • ${lev}x • Kesin coin miktarı emir anında backend hesaplar.`;
     }
   }
 
@@ -1923,7 +1952,7 @@ async function renderTestnetView(){
     updateTestnetOrderPreview();
   });
 
-  ["testnetRisk","testnetLev","testnetFixedUsdt","testnetLevFixed"].forEach(id=>{
+  ["testnetRisk","testnetLev","testnetFixedUsdt","testnetLevFixed","testnetEntryPrice"].forEach(id=>{
     const el=$(id); if(el)el.addEventListener("input",updateTestnetOrderPreview);
     if(el)el.addEventListener("change",updateTestnetOrderPreview);
   });
@@ -1950,16 +1979,17 @@ async function renderTestnetView(){
     saveTestnetToken($("testnetTokenInput").value.trim());
     const risk=Number($("testnetRisk").value);
     const fixedNotional=Number($("testnetFixedUsdt").value);
+    const entryPrice=Number(testnetEntryType==="limit"?$("testnetEntryPrice").value:(latestAnalysis?.price||latestAnalysis?.signalClose||0));
     const lev=testnetPositionMode==="fixed"?Number($("testnetLevFixed").value):Number($("testnetLev").value);
     const modeText=testnetPositionMode==="fixed"?`${fixedNotional} USDT sabit pozisyon`:`Risk %${risk}`;
 
-    $("testnetStatus").textContent=`Emir hazırlanıyor • ${p.symbol} ${p.direction} • ${modeText} • ${lev}x`;
+    $("testnetStatus").textContent=`Emir hazırlanıyor • ${p.symbol} ${p.direction} • ${testnetEntryType==="limit"?`Limit ${fmt(entryPrice)}`:"Piyasa"} • ${modeText} • ${lev}x`;
     openBtn.disabled=true;
     openBtn.textContent="EMİR HAZIRLANIYOR...";
 
     try{
       const confirmed=window.confirm(
-        `BINANCE FUTURES TESTNET\n\n${p.symbol} ${p.direction}\nYaklaşık giriş fiyatı: ${latestAnalysis?.price?fmt(Number(latestAnalysis.price)):"-"}\n${testnetPositionMode==="fixed"?`Pozisyon: ${fixedNotional} USDT\nYaklaşık miktar: ${latestAnalysis?.price?(fixedNotional/Number(latestAnalysis.price)).toFixed((fixedNotional/Number(latestAnalysis.price))<1?6:4):"-"} ${p.symbol.replace(/USDT$/,"")}\nTahmini teminat: ${(fixedNotional/lev).toFixed(2)} USDT`:`Risk: %${risk}\nKesin coin miktarı backend hesaplar.`}\nKaldıraç: ${lev}x\nSL: ${p.stop}\nTP1: ${p.tp1}\nTP2: ${p.tp2}\n\nTestnet emri açılsın mı?`
+        `BINANCE FUTURES TESTNET\n\n${p.symbol} ${p.direction}\n${testnetEntryType==="limit"?"Limit giriş fiyatı":"Yaklaşık piyasa giriş fiyatı"}: ${entryPrice?fmt(entryPrice):"-"}\n${testnetPositionMode==="fixed"?`Pozisyon: ${fixedNotional} USDT\nYaklaşık miktar: ${latestAnalysis?.price?(fixedNotional/Number(latestAnalysis.price)).toFixed((fixedNotional/Number(latestAnalysis.price))<1?6:4):"-"} ${p.symbol.replace(/USDT$/,"")}\nTahmini teminat: ${(fixedNotional/lev).toFixed(2)} USDT`:`Risk: %${risk}\nKesin coin miktarı backend hesaplar.`}\nKaldıraç: ${lev}x\nSL: ${p.stop}\nTP1: ${p.tp1}\nTP2: ${p.tp2}\n\nTestnet emri açılsın mı?`
       );
       if(!confirmed){
         $("testnetStatus").textContent="Emir iptal edildi.";
@@ -1972,6 +2002,8 @@ async function renderTestnetView(){
       const d=await testnetCall("testnet-open",{
         symbol:p.symbol,
         direction:p.direction,
+        entryType:testnetEntryType,
+        entryPrice:entryPrice,
         stop:p.stop,
         tp1:p.tp1,
         tp2:p.tp2,
@@ -1982,8 +2014,14 @@ async function renderTestnetView(){
       });
 
       const baseAsset=String(d.symbol||"").replace(/USDT$/,"");
-      const actualEntry=Number(d.entryOrder?.avgPrice||d.entryOrder?.price||d.markPrice||0);
-      $("testnetStatus").textContent=`✅ Açıldı • ${d.symbol} ${d.direction} • Giriş ${actualEntry?fmt(actualEntry):"-"} • ${Number(d.notional).toFixed(2)} USDT • ${d.quantity} ${baseAsset} • ~${Number(d.estimatedMargin||0).toFixed(2)} USDT teminat`;
+      const actualEntry=Number(d.entryOrder?.avgPrice||d.entryOrder?.price||d.requestedEntry||d.markPrice||0);
+      if(d.pending){
+        localStorage.setItem("bsa_pending_protection",JSON.stringify({symbol:d.symbol,direction:d.direction,stop:d.stop,tp1:d.tp1,tp2:d.tp2,orderId:d.entryOrder?.orderId}));
+        $("testnetStatus").textContent=`🕒 Limit emir bekliyor • ${d.symbol} ${d.direction} • Giriş ${fmt(d.requestedEntry)} • ${Number(d.notional).toFixed(2)} USDT • ${d.quantity} ${baseAsset}`;
+      }else{
+        localStorage.removeItem("bsa_pending_protection");
+        $("testnetStatus").textContent=`✅ Açıldı • ${d.symbol} ${d.direction} • Giriş ${actualEntry?fmt(actualEntry):"-"} • ${Number(d.notional).toFixed(2)} USDT • ${d.quantity} ${baseAsset} • ~${Number(d.estimatedMargin||0).toFixed(2)} USDT teminat`;
+      }
 
       await new Promise(r=>setTimeout(r,1000));
       await refreshTestnetDashboard();
@@ -2004,6 +2042,21 @@ async function renderTestnetView(){
       if(activeAppView==="testnetView")refreshTestnetDashboard().catch(()=>{});
     },5000);
   }catch(e){}
+}
+
+
+function renderTestnetPendingOrders(rows){
+  const box=$("testnetPendingOrdersBox");if(!box)return;
+  const pending=(rows||[]).filter(x=>x.type==="LIMIT"&&["NEW","PARTIALLY_FILLED"].includes(String(x.status)));
+  box.innerHTML=`<div class="menu-card-title">Bekleyen Giriş Emirleri</div>`+
+    (pending.length?pending.map(x=>`
+      <div class="testnet-pos">
+        <div class="menu-card-row">
+          <div><strong>${esc(x.symbol)} • ${esc(x.side)}</strong><div class="menu-card-sub">${esc(x.status)}</div></div>
+          <div style="text-align:right"><div>${fmt(x.price)}</div><div class="menu-card-sub">Limit giriş</div></div>
+        </div>
+        <div class="menu-card-sub">Miktar: ${x.origQty} • Gerçekleşen: ${x.executedQty}</div>
+      </div>`).join(""):`<div class="menu-card-sub">Bekleyen limit giriş emri yok.</div>`);
 }
 
 function renderTestnetOrders(rows){
@@ -2039,7 +2092,26 @@ async function refreshTestnetDashboard(){
         <div class="menu-card-sub" style="margin-top:8px">${d.oneWayMode?"✅ One-way Mode uygun.":"⚠️ Hedge Mode açık; emir açmadan önce One-way Mode gerekli."}</div>`;
     }
     renderTestnetPositions(d.openPositions||[]);
+    renderTestnetPendingOrders(d.openOrders||[]);
     renderTestnetOrders(d.algoOrders||[]);
+    try{
+      const raw=localStorage.getItem("bsa_pending_protection");
+      if(raw){
+        const pp=JSON.parse(raw);
+        const pos=(d.openPositions||[]).find(x=>x.symbol===pp.symbol&&Math.abs(Number(x.positionAmt||0))>0);
+        const hasProtection=(d.algoOrders||[]).some(x=>x.symbol===pp.symbol);
+        if(pos&&!hasProtection){
+          const pr=await testnetCall("testnet-protect",pp);
+          if(pr.protected||pr.alreadyProtected){
+            localStorage.removeItem("bsa_pending_protection");
+            if($("testnetStatus"))$("testnetStatus").textContent=`✅ ${pp.symbol} limit emri gerçekleşti • SL/TP koruması kuruldu.`;
+            setTimeout(()=>refreshTestnetDashboard().catch(()=>{}),500);
+          }
+        }
+      }
+    }catch(e){
+      if($("testnetStatus")&&String(e?.message||"").indexOf("henüz gerçekleşmemiş")<0)$("testnetStatus").textContent="Koruma kontrolü: "+e.message;
+    }
     return d;
   }catch(e){
     const s=$("testnetStatus"); if(s)s.textContent="Hata: "+e.message;
