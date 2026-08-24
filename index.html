@@ -562,6 +562,9 @@ body.pro-mode .backtest-main{display:block!important}
 
 
 .exchange-warning:empty{display:none!important}
+
+#v10Trend,#v10Stage{font-weight:950}
+.v10-ready{color:#f0b90b}.v10-go{color:#2bd576}.v10-stop{color:#ff6b7a}
 </style></head>
 <body>
 <div id="menuOverlay" class="menu-overlay" aria-hidden="true">
@@ -582,7 +585,7 @@ body.pro-mode .backtest-main{display:block!important}
       <button class="menu-item pro-only" type="button" data-view="riskView"><span>🧮 Pozisyon Hesabı</span><span>›</span></button>
       <button class="menu-item pro-only" type="button" data-view="advancedInfoView"><span>🛠️ Gelişmiş Bilgiler</span><span>›</span></button>
       <button class="menu-item pro-only" type="button" data-view="paperView"><span>🎮 Demo İşlem</span><span>›</span></button>
-      <button class="menu-item" type="button" data-view="testnetView"><span>🧪 Binance Futures Testnet</span><span>›</span></button>
+      <button class="menu-item" type="button" data-view="testnetView"><span>💼 Binance Futures İşlem</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="signalsView"><span>📚 İşlem Geçmişi</span><span>›</span></button>
     </div>
   </aside>
@@ -637,7 +640,7 @@ body.pro-mode .backtest-main{display:block!important}
   </div>
   <div class="easy-controls">
     <div class="picker"><input id="symbol" value="1000PEPEUSDT" placeholder="Parite ara..."><div id="list" class="list"></div></div>
-    <select id="interval"><option>1m</option><option>3m</option><option selected>5m</option><option>15m</option><option>1h</option></select>
+    <select id="interval"><option>1m</option><option>3m</option><option selected>5m</option><option>15m</option><option>1h</option></select><div class="menu-card-sub" style="grid-column:1/-1">Sinyal motoru sabit: <b>5m yön + 1m giriş</b>. Zaman seçimi grafik/backtest için kullanılabilir.</div>
     <button id="analyze" class="primary-action">SİNYALİ GÖSTER</button>
     <button id="backtest" class="secondary backtest-main pro-only">BACKTEST</button>
   </div>
@@ -669,6 +672,10 @@ body.pro-mode .backtest-main{display:block!important}
   <div class="k">ŞİMDİ NE YAPMALIYIM?</div>
   <div id="decision" class="word wait easy-word">BEKLE</div>
   <div id="easyStrength" class="easy-strength">Sinyal bekleniyor</div>
+  <div class="simple-summary-grid" style="margin-top:10px">
+    <div class="simple-kpi"><div class="k">TREND</div><div id="v10Trend" class="v">—</div></div>
+    <div class="simple-kpi"><div class="k">1m TETİK</div><div id="v10Stage" class="v">İZLE</div></div>
+  </div>
   <div id="note" class="easy-message">Pariteyi seçip “SİNYALİ GÖSTER” butonuna bas.</div>
   <div id="commonConf" class="beginner-hide">—</div>
   <div id="conflictBox" class="conflict-box"></div>
@@ -715,10 +722,10 @@ body.pro-mode .backtest-main{display:block!important}
 
 <div class="card collapsible-card pro-panel">
 <button class="collapse-toggle" type="button" aria-expanded="false" data-target="100-puanlik-geli-mi-si-stem">
-  <span>100 PUANLIK GELİŞMİŞ SİSTEM</span><span class="chev">⌄</span>
+  <span>V11 REALTIME SCALP MOTORU</span><span class="chev">⌄</span>
 </button>
 <div id="100-puanlik-geli-mi-si-stem" class="collapse-content">
-<div class="k">100 PUANLIK GELİŞMİŞ SİSTEM</div><div class="grid"><div class="metric"><div class="k">Skor</div><div id="advScore" class="v">—</div></div><div class="metric" style="grid-column:span 3"><div class="k">Değerlendirme</div><div id="advLabel" class="v">—</div></div></div><div id="breakdown" class="grid" style="margin-top:10px"></div>
+<div class="k">V11 REALTIME SCALP MOTORU</div><div class="grid"><div class="metric"><div class="k">Skor</div><div id="advScore" class="v">—</div></div><div class="metric" style="grid-column:span 3"><div class="k">Değerlendirme</div><div id="advLabel" class="v">—</div></div></div><div id="breakdown" class="grid" style="margin-top:10px"></div>
 </div>
 </div>
 
@@ -1089,12 +1096,13 @@ async function fetchBinanceTrKlinesDirect(symbol,interval,limit=320){
   return data;
 }
 async function getBinanceTrBundle(symbol,interval,limit=320){
-  const [k,k15,k1h]=await Promise.all([
-    fetchBinanceTrKlinesDirect(symbol,interval,limit),
-    fetchBinanceTrKlinesDirect(symbol,"15m",Math.min(1000,limit)),
-    fetchBinanceTrKlinesDirect(symbol,"1h",Math.min(500,limit))
+  const [k,k1m,k15,k1h]=await Promise.all([
+    fetchBinanceTrKlinesDirect(symbol,"5m",limit),
+    fetchBinanceTrKlinesDirect(symbol,"1m",Math.min(limit,500)),
+    fetchBinanceTrKlinesDirect(symbol,"15m",Math.min(limit,500)),
+    fetchBinanceTrKlinesDirect(symbol,"1h",Math.min(limit,500))
   ]);
-  return {k,k15,k1h};
+  return {k,k1m,k15,k1h};
 }
 
 function activeSignalProfile(){
@@ -1174,24 +1182,34 @@ async function analyze(){
    const bundle=await getBinanceTrBundle(symbol,interval,320);
    r=await fetch("/api/binance-tr-local?action=analyze",{
      method:"POST",headers:{"content-type":"application/json"},cache:"no-store",
-     body:JSON.stringify({symbol,interval,profile:activeSignalProfile(),...bundle})
+     body:JSON.stringify({symbol,interval:"5m",profile:activeSignalProfile(),...bundle})
    });
    d=await safeReadResponse(r,"Binance TR analiz servisi");
  }else{
-   r=await fetch(`/api/analyze?symbol=${symbol}&interval=${interval}${profileParam()}`,{cache:"no-store"});
+   r=await fetch(`/api/analyze?symbol=${symbol}&interval=5m${profileParam()}`,{cache:"no-store"});
    d=await safeReadResponse(r,"Analiz servisi");
  }
  d=applyDisplayScale(d,displaySymbol);
  d.displaySymbol=displaySymbol;
  d.exchange=currentExchange();
  setDecision(d.common.decision);
- const dirText=currentExchange()==="binancetr"
-   ? (d.common.decision.includes("LONG")?"AL fırsatı: yukarı yön daha güçlü. Giriş bölgesini bekle.":
-      d.common.decision.includes("SHORT")?"SAT sinyali: elinde coin varsa azalt/sat düşünülebilir. Coin yoksa short açılmaz.":
-      "BEKLE: Binance TR spotta yeni alım için yön yeterince net değil.")
-   : (d.common.decision.includes("LONG")?"Yukarı yön daha güçlü. Belirlenen giriş bölgesini bekle.":
-      d.common.decision.includes("SHORT")?"Aşağı yön daha güçlü. Belirlenen giriş bölgesini bekle.":
-      "Yön yeterince net değil. Yeni işlem açmak için acele etme.");
+ const trend=d.v11?.trend5m||d.v10?.trend||d.advanced?.trend||"NÖTR";
+ const stage=d.v11?.microTrigger?.stage||d.v10?.stage||d.advanced?.stage||"İZLE";
+ if($("v10Trend"))$("v10Trend").textContent=trend;
+ if($("v10Stage")){
+   $("v10Stage").textContent=stage;
+   $("v10Stage").className="v "+(stage==="AL"||stage==="SAT"?"v10-go":stage==="HAZIR"?"v10-ready":"");
+ }
+ const blockers=[...(d.advanced?.blockers||[]),...(d.v11?.microTrigger?.blockers||[])];
+ const dirText=d.common.decision.includes("LONG")
+   ?"AL: trend + retest + tepki teyidi tamamlandı. Stop olmadan işlem açma."
+   :d.common.decision.includes("SHORT")
+   ?(currentExchange()==="binancetr"?"SAT: spotta elindeki pozisyonu azalt/sat.":"SAT/SHORT: trend + retest + satış teyidi tamamlandı.")
+   :stage==="HAZIR"
+   ?`${trend} trend var. Retest oluştu; son teyit bekleniyor.`
+   :blockers.length
+   ?`BEKLE: ${blockers.slice(0,2).join(" • ")}`
+   :`${trend} trend izleniyor. Uygun retest gelmeden işlem yok.`;
  $("note").textContent=dirText;
  $("commonConf").textContent=d.common.confidence+"%";
  $("legacySig").textContent=d.legacy.signal;$("longScore").textContent=d.legacy.longScore+"/7";$("shortScore").textContent=d.legacy.shortScore+"/7";$("legacyConf").textContent=d.legacy.confidence+"%";
@@ -1199,10 +1217,14 @@ async function analyze(){
  $("breakdown").innerHTML=d.advanced.breakdown.map(x=>`<div class="metric"><div class="k">${x.label}</div><div class="v">${x.score}/${x.max}</div><div class="sub">${x.text}</div></div>`).join("");
  if(d.levels.entry!=null){$("entryZone").textContent=`${fmt(d.levels.entryLow)} – ${fmt(d.levels.entryHigh)}`;$("stop").textContent=fmt(d.levels.stop);$("tp1").textContent=fmt(d.levels.tp1);$("tp2").textContent=fmt(d.levels.tp2)}else{$("entryZone").textContent=$("stop").textContent=$("tp1").textContent=$("tp2").textContent="—"}
  $("entryReason").textContent=d.levels.entry!=null
-   ? `Fiyat bu bölgeye geldiğinde sinyal hâlâ geçerliyse işlem düşünülebilir. ${d.levels.reason||""}`
-   : "Şu anda güvenli bir giriş bölgesi oluşmadı.";
+   ? `${d.levels.reason||"V10 giriş teyidi"} • Minimum hedef R/R: 1:1.5`
+   : (d.levels.reason||"Şu anda güvenli bir giriş bölgesi oluşmadı.");
  updateDecisionExtras(d);
  updateEasyUI(d);
+ if(d.advanced?.warnings?.length&&$("easyWhy")){
+   const extra=d.advanced.warnings.slice(0,2).map(x=>`<div class="easy-why-item"><span class="easy-why-icon">⚠️</span><span>${esc(x)}</span></div>`).join("");
+   $("easyWhy").innerHTML+=extra;
+ }
  if(currentExchange()==="binancetr"){
    marketContext=null;
    $("ctx15").textContent="15m • Binance TR";
@@ -1218,7 +1240,7 @@ async function analyze(){
    ? `${displaySymbol} • Margex parametreleri • Referans veri: Binance Futures (${symbol}) • ${d.interval} • Anlık referans ${fmt(d.price)}`
    : currentExchange()==="binancetr"
    ? `${displaySymbol} • Binance TR SPOT • Kendi TRY verisi • ${d.interval} • ${fmt(d.price)} TL`
-   : `${d.symbol} • ${d.interval} • V7.4 ${String(d.v7?.profile||activeSignalProfile()).toUpperCase()} • Anlık fiyat ${fmt(d.price)} • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")}`;
+   : `${d.symbol} • ${d.interval} • V11 REALTIME SCALP ${String(d.v7?.profile||activeSignalProfile()).toUpperCase()} • Anlık fiyat ${fmt(d.price)} • ${new Date(d.timestamp).toLocaleTimeString("tr-TR")}`;
  latestAnalysis=d;
  saveAnalysisRecord(d);
  saveSignalRecord(d);
@@ -1567,7 +1589,7 @@ function openAppView(view){
     advancedInfoView:"Gelişmiş Bilgiler",
     riskView:"Risk Hesaplayıcı",
     paperView:"Paper Trading",
-    testnetView:"Binance Futures Testnet",
+    testnetView:"Binance Futures İşlem",
     signalsView:"Geçmiş Sinyaller"
   };
   $("viewTitle").textContent=titles[view]||"Menü";
@@ -1800,15 +1822,16 @@ async function refreshPaperTrades(){
   saveJSON("bsa_paper_trades",paperTrades);
 }
 
+let futuresAccountMode="testnet";
 function testnetToken(){try{return localStorage.getItem("bsa_testnet_token")||""}catch(e){return""}}
 function saveTestnetToken(v){try{localStorage.setItem("bsa_testnet_token",String(v||""))}catch(e){}}
 async function testnetCall(action,body={}){
   const token=testnetToken();
   const r=await fetch(`/api/binance-tr-local?action=${encodeURIComponent(action)}`,{
     method:"POST",
-    headers:{"content-type":"application/json","x-app-token":token},
+    headers:{"content-type":"application/json","x-app-token":token,"x-account-mode":futuresAccountMode},
     cache:"no-store",
-    body:JSON.stringify(body)
+    body:JSON.stringify({...body,accountMode:futuresAccountMode})
   });
   const text=await r.text();
   let d;try{d=JSON.parse(text)}catch{throw Error(`Testnet servisi JSON değil • HTTP ${r.status}`)}
@@ -1831,11 +1854,20 @@ async function renderTestnetView(){
     <div class="menu-card">
       <div class="menu-card-row">
         <div>
-          <div class="menu-card-title">Binance Futures Testnet</div>
-          <div class="menu-card-sub">Gerçek para kullanmaz. API anahtarları yalnızca Vercel Environment Variables içinde tutulur.</div>
+          <div class="menu-card-title">Binance Futures İşlem</div>
+          <div class="menu-card-sub">Testnet veya gerçek Binance USDⓈ-M Futures hesabını seçebilirsin. API secret tarayıcıya gönderilmez.</div>
         </div>
-        <span class="testnet-badge">🧪 TESTNET ONLY</span>
+        <span id="accountModeBadge" class="testnet-badge">🧪 TESTNET</span>
       </div>
+      <div class="seg" id="futuresAccountMode">
+        <button type="button" class="active" data-accountmode="testnet">🧪 TESTNET</button>
+        <button type="button" data-accountmode="mainnet">🔴 GERÇEK HESAP</button>
+      </div>
+      <div id="mainnetWarning" class="menu-card-sub" style="display:none;margin-top:10px;border:1px solid #b33;padding:10px;border-radius:12px">
+        🔴 GERÇEK PARA MODU. Emirler Binance Futures gerçek hesabına gönderilir.
+        İlk sürümde maksimum 500 USDT nominal pozisyon, maksimum 10x kaldıraç ve maksimum %1 risk uygulanır.
+      </div>
+
       <div class="testnet-field">
         <label>UYGULAMA ERİŞİM KODU</label>
         <input id="testnetTokenInput" type="password" value="${esc(savedToken)}" placeholder="Vercel'deki BINANCE_TESTNET_APP_TOKEN">
@@ -1891,7 +1923,7 @@ async function renderTestnetView(){
       <div id="testnetOrderPreview" class="menu-card-sub" style="margin-top:10px"></div>
 
       <div class="testnet-actions">
-        <button id="testnetOpenLatest" class="small-btn" type="button" ${plan.ok?"":"disabled"}>TESTNET EMRİNİ AÇ</button>
+        <button id="testnetOpenLatest" class="small-btn" type="button" ${plan.ok?"":"disabled"}>EMRİ AÇ</button>
       </div>
       <div class="menu-card-sub" style="margin-top:8px">Sabit USDT modunda kaldıraç pozisyon tutarını büyütmez; yalnızca gereken teminatı değiştirir. Maksimum kaldıraç 20x.</div>
     </div>
@@ -1910,6 +1942,22 @@ async function renderTestnetView(){
       <div class="menu-card-title">Koruyucu Emirler (SL / TP)</div>
       <div class="menu-card-sub">Henüz yüklenmedi.</div>
     </div>`;
+
+  const accountModeBox=$("futuresAccountMode");
+  const mainnetWarning=$("mainnetWarning");
+  const accountModeBadge=$("accountModeBadge");
+  accountModeBox.querySelectorAll("[data-accountmode]").forEach(btn=>btn.onclick=()=>{
+    const wanted=btn.dataset.accountmode;
+    if(wanted==="mainnet"){
+      const ok=window.confirm("GERÇEK HESAP MODU\n\nBu mod gerçek Binance Futures hesabında gerçek para ile emir gönderebilir.\n\nDevam edilsin mi?");
+      if(!ok)return;
+    }
+    futuresAccountMode=wanted;
+    accountModeBox.querySelectorAll("[data-accountmode]").forEach(x=>x.classList.toggle("active",x===btn));
+    mainnetWarning.style.display=wanted==="mainnet"?"block":"none";
+    accountModeBadge.textContent=wanted==="mainnet"?"🔴 GERÇEK HESAP":"🧪 TESTNET";
+    $("testnetStatus").textContent=wanted==="mainnet"?"🔴 Gerçek hesap modu seçildi.":"🧪 Testnet modu seçildi.";
+  });
 
   let testnetEntryType="market";
   const entryModeBox=$("testnetEntryType");
@@ -1996,7 +2044,14 @@ async function renderTestnetView(){
         return;
       }
 
-      $("testnetStatus").textContent="Binance Testnet'e emir gönderiliyor...";
+      if(futuresAccountMode==="mainnet"){
+        const finalOk=window.confirm("SON ONAY\n\nBu işlem GERÇEK PARA kullanacak.\n\nEmri gerçek Binance Futures hesabına göndermek istediğine emin misin?");
+        if(!finalOk){
+          $("testnetStatus").textContent="Gerçek hesap emri iptal edildi.";
+          return;
+        }
+      }
+      $("testnetStatus").textContent=futuresAccountMode==="mainnet"?"🔴 Gerçek hesaba emir gönderiliyor...":"🧪 Testnet'e emir gönderiliyor...";
       openBtn.textContent="EMİR GÖNDERİLİYOR...";
 
       const d=await testnetCall("testnet-open",{
@@ -2010,7 +2065,8 @@ async function renderTestnetView(){
         positionMode:testnetPositionMode,
         riskPercent:risk,
         fixedNotional:fixedNotional,
-        leverage:lev
+        leverage:lev,
+        mainnetConfirm:futuresAccountMode==="mainnet"?"GERCEK_EMIR_ONAY":""
       });
 
       const baseAsset=String(d.symbol||"").replace(/USDT$/,"");
@@ -2031,7 +2087,7 @@ async function renderTestnetView(){
       $("testnetStatus").textContent="❌ Emir hatası: "+(e?.message||String(e));
     }finally{
       openBtn.disabled=false;
-      openBtn.textContent="TESTNET EMRİNİ AÇ";
+      openBtn.textContent="EMRİ AÇ";
     }
   });
 
