@@ -900,11 +900,18 @@ function renderFav(){
 async function loadSymbols(){
   if(currentExchange()==="margex"){symbols=MARGEX_PAIRS.map(x=>({symbol:x.symbol,baseAsset:x.base}));return}
   if(currentExchange()==="binancetr"){
-    symbols=[
-      "BTCTRY","ETHTRY","SOLTRY","XRPTRY","BNBTRY","DOGETRY","ADATRY","AVAXTRY",
-      "LINKTRY","LTCTRY","DOTTRY","TRXTRY","NEARTRY","ATOMTRY","UNITRY","AAVETRY",
-      "ARBTRY","OPTRY"
-    ].map(symbol=>({symbol,baseAsset:symbol.slice(0,-3)}));
+    try{
+      const r=await fetch(`/api/binance-tr-proxy?action=symbols&t=${Date.now()}`,{cache:"no-store"});
+      const d=await safeReadResponse(r,"Binance TR parite servisi");
+      symbols=Array.isArray(d.symbols)?d.symbols:[];
+      if(!symbols.length)throw Error("TRY paritesi bulunamadı");
+      const st=document.getElementById("status");
+      if(st)st.textContent=`Binance TR • ${symbols.length} TRY paritesi yüklendi.`;
+    }catch(e){
+      symbols=["BTCTRY","ETHTRY","SOLTRY","XRPTRY","BNBTRY","DOGETRY"].map(symbol=>({symbol,baseAsset:symbol.slice(0,-3)}));
+      const st=document.getElementById("status");
+      if(st)st.textContent="Binance TR tüm pariteler alınamadı; temel pariteler gösteriliyor: "+e.message;
+    }
     return;
   }
   try{
