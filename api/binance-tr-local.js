@@ -392,11 +392,12 @@ async function testnetSymbolRules(symbol){
 }
 async function testnetAccount(req){
   const env=requireTestnetAuth(req);
-  const [balances,positions,mode,orders]=await Promise.all([
+  const [balances,positions,mode,orders,algoOrders]=await Promise.all([
     futSigned("GET","/fapi/v2/balance",{},env),
     futSigned("GET","/fapi/v2/positionRisk",{},env),
     futSigned("GET","/fapi/v1/positionSide/dual",{},env),
-    futSigned("GET","/fapi/v1/openOrders",{},env)
+    futSigned("GET","/fapi/v1/openOrders",{},env),
+    futSigned("GET","/fapi/v1/openAlgoOrders",{algoType:"CONDITIONAL"},env).catch(()=>[])
   ]);
   const usdt=balances.find(x=>x.asset==="USDT")||{};
   const openPositions=positions.filter(x=>Math.abs(Number(x.positionAmt||0))>0).map(x=>({
@@ -414,11 +415,23 @@ async function testnetAccount(req){
     walletBalance:Number(usdt.balance||0),
     availableBalance:Number(usdt.availableBalance||0),
     openPositions,
-    openOrders:(orders||[]).map(x=>({symbol:x.symbol,orderId:x.orderId,type:x.type,side:x.side,stopPrice:Number(x.stopPrice||0),origQty:Number(x.origQty||0),status:x.status}))
+    openOrders:(orders||[]).map(x=>({symbol:x.symbol,orderId:x.orderId,type:x.type,side:x.side,stopPrice:Number(x.stopPrice||0),origQty:Number(x.origQty||0),status:x.status})),
+    algoOrders:(algoOrders||[]).map(x=>({
+      symbol:x.symbol,
+      algoId:x.algoId,
+      clientAlgoId:x.clientAlgoId,
+      type:x.type,
+      side:x.side,
+      triggerPrice:Number(x.triggerPrice||0),
+      quantity:Number(x.quantity||0),
+      closePosition:String(x.closePosition||"").toLowerCase()==="true",
+      algoStatus:x.algoStatus||x.status||"NEW"
+    }))
   };
 }
 async function emergencyCloseSymbol(symbol,positionAmt,env){
   try{await futSigned("DELETE","/fapi/v1/allOpenOrders",{symbol},env)}catch(e){}
+  try{await futSigned("DELETE","/fapi/v1/algoOpenOrders",{symbol},env)}catch(e){}
   if(!positionAmt)return;
   const side=Number(positionAmt)>0?"SELL":"BUY";
   const rules=await testnetSymbolRules(symbol);
@@ -488,18 +501,40 @@ async function testnetOpen(req){
     const halfQty=floorStep(executedQty*.5,rules.stepSize);
 
     const protective=[];
-    protective.push(await futSigned("POST","/fapi/v1/order",{
-      symbol,side:exitSide,type:"STOP_MARKET",stopPrice:roundedStop,closePosition:"true",workingType:"MARK_PRICE"
+    protective.push(await futSigned("POST","/fapi/v1/algoOrder",{
+      algoType:"CONDITIONAL",
+      symbol,
+      side:exitSide,
+      type:"STOP_MARKET",
+      triggerPrice:roundedStop,
+      closePosition:"true",
+      workingType:"MARK_PRICE",
+      newOrderRespType:"ACK"
     },env));
 
     if(halfQty>=rules.minQty && halfQty*mark>=rules.minNotional){
-      protective.push(await futSigned("POST","/fapi/v1/order",{
-        symbol,side:exitSide,type:"TAKE_PROFIT_MARKET",stopPrice:roundedTp1,quantity:halfQty,reduceOnly:"true",workingType:"MARK_PRICE"
+      protective.push(await futSigned("POST","/fapi/v1/algoOrder",{
+        algoType:"CONDITIONAL",
+        symbol,
+        side:exitSide,
+        type:"TAKE_PROFIT_MARKET",
+        triggerPrice:roundedTp1,
+        quantity:halfQty,
+        reduceOnly:"true",
+        workingType:"MARK_PRICE",
+        newOrderRespType:"ACK"
       },env));
     }
 
-    protective.push(await futSigned("POST","/fapi/v1/order",{
-      symbol,side:exitSide,type:"TAKE_PROFIT_MARKET",stopPrice:roundedTp2,closePosition:"true",workingType:"MARK_PRICE"
+    protective.push(await futSigned("POST","/fapi/v1/algoOrder",{
+      algoType:"CONDITIONAL",
+      symbol,
+      side:exitSide,
+      type:"TAKE_PROFIT_MARKET",
+      triggerPrice:roundedTp2,
+      closePosition:"true",
+      workingType:"MARK_PRICE",
+      newOrderRespType:"ACK"
     },env));
 
     return {
