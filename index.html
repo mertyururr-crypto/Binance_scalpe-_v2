@@ -541,6 +541,18 @@ body.margex-mode .exchange-warning{display:block}
 .scalp-simple-help{font-size:10px;color:var(--muted);margin-top:5px;line-height:1.4}
 .backtest-main{display:block!important;background:var(--panel);color:var(--text);border:1px solid var(--border)}
 
+
+.testnet-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid var(--yellow);border-radius:999px;color:var(--yellow);font-size:10px;font-weight:900}
+.testnet-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.testnet-field{display:grid;gap:5px;margin-top:9px}
+.testnet-field label{font-size:10px;color:var(--muted);font-weight:800}
+.testnet-field input,.testnet-field select{width:100%;min-height:42px}
+.testnet-actions{display:grid;grid-template-columns:1fr;gap:8px;margin-top:10px}
+.testnet-danger{background:#3a1d22!important;color:#fff!important;border:1px solid #6b2c36!important}
+.testnet-pos{padding:10px 0;border-bottom:1px solid var(--border)}
+.testnet-pos:last-child{border-bottom:0}
+@media(min-width:600px){.testnet-actions{grid-template-columns:1fr 1fr}}
+
 </style></head>
 <body>
 <div id="menuOverlay" class="menu-overlay" aria-hidden="true">
@@ -561,6 +573,7 @@ body.margex-mode .exchange-warning{display:block}
       <button class="menu-item pro-only" type="button" data-view="riskView"><span>🧮 Pozisyon Hesabı</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="advancedInfoView"><span>🛠️ Gelişmiş Bilgiler</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="paperView"><span>🎮 Demo İşlem</span><span>›</span></button>
+      <button class="menu-item" type="button" data-view="testnetView"><span>🧪 Binance Futures Testnet</span><span>›</span></button>
       <button class="menu-item" type="button" data-view="signalsView"><span>📚 İşlem Geçmişi</span><span>›</span></button>
     </div>
   </aside>
@@ -1540,6 +1553,7 @@ function openAppView(view){
     advancedInfoView:"Gelişmiş Bilgiler",
     riskView:"Risk Hesaplayıcı",
     paperView:"Paper Trading",
+    testnetView:"Binance Futures Testnet",
     signalsView:"Geçmiş Sinyaller"
   };
   $("viewTitle").textContent=titles[view]||"Menü";
@@ -1568,6 +1582,7 @@ function renderView(view){
   if(view==="advancedInfoView")return renderAdvancedInfoView();
   if(view==="riskView")return renderRiskView();
   if(view==="paperView")return renderPaperView();
+  if(view==="testnetView")return renderTestnetView();
   if(view==="signalsView")return renderSignalsView();
 }
 async function renderFavoritesView(){
@@ -1770,6 +1785,135 @@ async function refreshPaperTrades(){
   }
   saveJSON("bsa_paper_trades",paperTrades);
 }
+
+function testnetToken(){try{return localStorage.getItem("bsa_testnet_token")||""}catch(e){return""}}
+function saveTestnetToken(v){try{localStorage.setItem("bsa_testnet_token",String(v||""))}catch(e){}}
+async function testnetCall(action,body={}){
+  const token=testnetToken();
+  const r=await fetch(`/api/binance-tr-local?action=${encodeURIComponent(action)}`,{
+    method:"POST",
+    headers:{"content-type":"application/json","x-app-token":token},
+    cache:"no-store",
+    body:JSON.stringify(body)
+  });
+  const text=await r.text();
+  let d;try{d=JSON.parse(text)}catch{throw Error(`Testnet servisi JSON değil • HTTP ${r.status}`)}
+  if(!r.ok)throw Error(d.error||`HTTP ${r.status}`);
+  return d;
+}
+function testnetLatestPlan(){
+  if(currentExchange()!=="binance")return {ok:false,msg:"Testnet emirleri yalnızca Binance Futures sinyallerinden açılır."};
+  if(!latestAnalysis)return {ok:false,msg:"Önce ana ekranda Binance Futures analizi yap."};
+  const dec=String(latestAnalysis.common?.decision||"");
+  const dir=dec.includes("LONG")?"LONG":dec.includes("SHORT")?"SHORT":null;
+  const l=latestAnalysis.levels||{};
+  if(!dir||![l.stop,l.tp1,l.tp2].every(x=>Number.isFinite(Number(x))))return {ok:false,msg:"Son analizde işlem açılabilir LONG/SHORT planı yok."};
+  return {ok:true,symbol:latestAnalysis.symbol,direction:dir,stop:Number(l.stop),tp1:Number(l.tp1),tp2:Number(l.tp2)};
+}
+async function renderTestnetView(){
+  const savedToken=testnetToken();
+  const plan=testnetLatestPlan();
+  $("viewBody").innerHTML=`
+    <div class="menu-card">
+      <div class="menu-card-row">
+        <div>
+          <div class="menu-card-title">Binance Futures Testnet</div>
+          <div class="menu-card-sub">Gerçek para kullanmaz. API anahtarları yalnızca Vercel Environment Variables içinde tutulur.</div>
+        </div>
+        <span class="testnet-badge">🧪 TESTNET ONLY</span>
+      </div>
+      <div class="testnet-field">
+        <label>UYGULAMA ERİŞİM KODU</label>
+        <input id="testnetTokenInput" type="password" value="${esc(savedToken)}" placeholder="Vercel'deki BINANCE_TESTNET_APP_TOKEN">
+      </div>
+      <div class="testnet-actions">
+        <button id="testnetSaveToken" class="small-btn" type="button">KODU KAYDET</button>
+        <button id="testnetRefresh" class="small-btn" type="button">HESABI YENİLE</button>
+      </div>
+      <div id="testnetStatus" class="menu-card-sub" style="margin-top:8px">Hazır.</div>
+    </div>
+
+    <div id="testnetAccountBox" class="menu-card">
+      <div class="menu-card-title">Hesap</div>
+      <div class="menu-card-sub">Bağlantıyı kontrol etmek için “Hesabı Yenile”ye bas.</div>
+    </div>
+
+    <div class="menu-card">
+      <div class="menu-card-title">Sinyalden Testnet İşlemi</div>
+      <div class="menu-card-sub">${plan.ok?`${esc(plan.symbol)} • ${esc(plan.direction)} • SL ${fmt(plan.stop)} • TP1 ${fmt(plan.tp1)} • TP2 ${fmt(plan.tp2)}`:esc(plan.msg)}</div>
+      <div class="testnet-grid">
+        <div class="testnet-field"><label>RİSK %</label><input id="testnetRisk" type="number" min="0.1" max="2" step="0.1" value="0.5"></div>
+        <div class="testnet-field"><label>KALDIRAÇ</label><select id="testnetLev"><option>2</option><option selected>5</option><option>10</option><option>15</option><option>20</option></select></div>
+      </div>
+      <div class="testnet-actions">
+        <button id="testnetOpenLatest" class="small-btn" type="button" ${plan.ok?"":"disabled"}>TESTNET EMRİNİ AÇ</button>
+      </div>
+      <div class="menu-card-sub" style="margin-top:8px">Pozisyon büyüklüğünü backend, stop mesafesi ve kullanılabilir USDT bakiyesine göre hesaplar. Risk üst sınırı %2, kaldıraç üst sınırı 20x'tir.</div>
+    </div>
+
+    <div id="testnetPositionsBox" class="menu-card">
+      <div class="menu-card-title">Açık Pozisyonlar</div>
+      <div class="menu-card-sub">Henüz yüklenmedi.</div>
+    </div>`;
+
+  $("testnetSaveToken").onclick=()=>{
+    saveTestnetToken($("testnetTokenInput").value.trim());
+    $("testnetStatus").textContent="Erişim kodu bu cihazda kaydedildi.";
+  };
+  $("testnetRefresh").onclick=async()=>{
+    saveTestnetToken($("testnetTokenInput").value.trim());
+    $("testnetStatus").textContent="Testnet hesabı okunuyor...";
+    try{
+      const d=await testnetCall("testnet-account");
+      $("testnetStatus").textContent=`Bağlandı • ${d.oneWayMode?"One-way":"Hedge"} Mode`;
+      $("testnetAccountBox").innerHTML=`
+        <div class="menu-card-title">Hesap</div>
+        <div class="testnet-grid">
+          <div><div class="menu-card-sub">Wallet</div><div class="performance-big">${Number(d.walletBalance).toFixed(2)} USDT</div></div>
+          <div><div class="menu-card-sub">Kullanılabilir</div><div class="performance-big">${Number(d.availableBalance).toFixed(2)} USDT</div></div>
+        </div>
+        <div class="menu-card-sub" style="margin-top:8px">${d.oneWayMode?"✅ One-way Mode uygun.":"⚠️ Hedge Mode açık; emir açmadan önce One-way Mode gerekli."}</div>`;
+      renderTestnetPositions(d.openPositions||[]);
+    }catch(e){$("testnetStatus").textContent="Hata: "+e.message}
+  };
+  $("testnetOpenLatest").onclick=async()=>{
+    const p=testnetLatestPlan();if(!p.ok){alert(p.msg);return}
+    saveTestnetToken($("testnetTokenInput").value.trim());
+    const risk=Number($("testnetRisk").value),lev=Number($("testnetLev").value);
+    const ok=confirm(`TESTNET ${p.direction} emri açılsın mı?\n${p.symbol}\nRisk: %${risk}\nKaldıraç: ${lev}x\nSL: ${p.stop}\nTP1: ${p.tp1}\nTP2: ${p.tp2}`);
+    if(!ok)return;
+    $("testnetStatus").textContent="Testnet emirleri gönderiliyor...";
+    try{
+      const d=await testnetCall("testnet-open",{...p,riskPercent:risk,leverage:lev});
+      $("testnetStatus").textContent=`Açıldı • ${d.symbol} ${d.direction} • ${d.quantity} adet • ${Number(d.notional).toFixed(2)} USDT`;
+      alert(`TESTNET işlem açıldı.\n${d.symbol} ${d.direction}\nMiktar: ${d.quantity}\nSL: ${d.stop}\nTP1: ${d.tp1}\nTP2: ${d.tp2}`);
+      const acc=await testnetCall("testnet-account");
+      renderTestnetPositions(acc.openPositions||[]);
+    }catch(e){$("testnetStatus").textContent="Emir hatası: "+e.message}
+  };
+}
+function renderTestnetPositions(rows){
+  const box=$("testnetPositionsBox");if(!box)return;
+  box.innerHTML=`<div class="menu-card-title">Açık Pozisyonlar</div>`+
+    (rows.length?rows.map(x=>`
+      <div class="testnet-pos">
+        <div class="menu-card-row">
+          <div><strong>${esc(x.symbol)}</strong><div class="menu-card-sub">${x.positionAmt>0?"LONG":"SHORT"} • ${Math.abs(x.positionAmt)} • ${x.leverage}x</div></div>
+          <div style="text-align:right"><div>${Number(x.unrealizedProfit).toFixed(2)} USDT</div><div class="menu-card-sub">PnL</div></div>
+        </div>
+        <div class="menu-card-sub">Entry ${fmt(x.entryPrice)} • Mark ${fmt(x.markPrice)} • Liq ${fmt(x.liquidationPrice)}</div>
+        <button class="small-btn testnet-danger testnet-close-pos" data-symbol="${esc(x.symbol)}" type="button" style="width:100%;margin-top:8px">TESTNET POZİSYONU KAPAT</button>
+      </div>`).join(""):`<div class="menu-card-sub">Açık pozisyon yok.</div>`);
+  box.querySelectorAll(".testnet-close-pos").forEach(b=>b.onclick=async()=>{
+    if(!confirm(`${b.dataset.symbol} TESTNET pozisyonu marketten kapatılsın mı?`))return;
+    try{
+      await testnetCall("testnet-close",{symbol:b.dataset.symbol});
+      const acc=await testnetCall("testnet-account");
+      renderTestnetPositions(acc.openPositions||[]);
+    }catch(e){alert("Kapatma hatası: "+e.message)}
+  });
+}
+
 async function renderPaperView(){
   $("viewBody").innerHTML=`<div class="empty-state">Paper işlemler güncelleniyor...</div>`;
   await refreshPaperTrades();
