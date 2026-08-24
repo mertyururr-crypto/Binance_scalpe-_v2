@@ -89,108 +89,263 @@ function legacyAt(d,o,h,l,c,v,n,withReasons=true){
 }
 function optimizedAt(d,o,h,l,c,v,n,mtf={m15:0,h1:0},profileName="balanced"){
   const cfg=getProfile(profileName);
-  const a=d.atrV[n],atrPct=a/c[n]*100,rv=d.vma[n]?v[n]/d.vma[n]:1,adxV=d.adxD.adx[n],p=d.adxD.plusDI[n],m=d.adxD.minusDI[n];
-  const hh20=Math.max(...h.slice(n-20,n)),ll20=Math.min(...l.slice(n-20,n));
-  const breakoutUp=c[n]>hh20,breakoutDn=c[n]<ll20;
-  const body=Math.abs(c[n]-o[n]),bodyAtr=a?body/a:0,dist20=a?Math.abs(c[n]-d.e20[n])/a:0;
+  const a=d.atrV[n]||Math.max(c[n]*.004,1e-12);
+  const atrPct=a/c[n]*100;
+  const rv=d.vma[n]?v[n]/d.vma[n]:1;
+  const adxV=d.adxD.adx[n],p=d.adxD.plusDI[n],m=d.adxD.minusDI[n];
   const tb=trendBias(d,c,n);
-  let score=50;const breakdown=[];let confirmations=0;
 
-  const trendPts=tb===1?18:tb===.5?10:tb===-.5?-10:tb===-1?-18:0;
-  score+=trendPts;if(Math.abs(tb)>=.5)confirmations++;
-  breakdown.push({label:"Trend",score:Math.round(12.5+trendPts*.69),max:25,text:tb>0?"EMA eğimi yukarı":tb<0?"EMA eğimi aşağı":"Trend karışık"});
+  const range=Math.max(h[n]-l[n],1e-12);
+  const body=Math.abs(c[n]-o[n]);
+  const bodyAtr=body/a;
+  const upperWick=Math.max(0,h[n]-Math.max(o[n],c[n]));
+  const lowerWick=Math.max(0,Math.min(o[n],c[n])-l[n]);
+  const upperWickPct=upperWick/range;
+  const lowerWickPct=lowerWick/range;
+  const closePos=(c[n]-l[n])/range;
+
+  const dist20Signed=(c[n]-d.e20[n])/a;
+  const dist20=Math.abs(dist20Signed);
+  const move3=(c[n]-c[Math.max(0,n-3)])/a;
+  const move5=(c[n]-c[Math.max(0,n-5)])/a;
+
+  const prevRes=Math.max(...h.slice(Math.max(0,n-24),n-1));
+  const prevSup=Math.min(...l.slice(Math.max(0,n-24),n-1));
+  const brokeUpRecently=Math.max(...c.slice(Math.max(0,n-3),n+1))>prevRes;
+  const brokeDnRecently=Math.min(...c.slice(Math.max(0,n-3),n+1))<prevSup;
+
+  const emaRetestLong=l[n]<=d.e20[n]+.18*a && c[n]>=d.e20[n] && closePos>=.58;
+  const emaRetestShort=h[n]>=d.e20[n]-.18*a && c[n]<=d.e20[n] && closePos<=.42;
+  const levelRetestLong=brokeUpRecently && l[n]<=prevRes+.18*a && c[n]>=prevRes-.04*a;
+  const levelRetestShort=brokeDnRecently && h[n]>=prevSup-.18*a && c[n]<=prevSup+.04*a;
+
+  const wickLong=lowerWickPct>=.25 && closePos>=.58 && c[n]>=o[n];
+  const wickShort=upperWickPct>=.25 && closePos<=.42 && c[n]<=o[n];
+
+  const retestLong=emaRetestLong||levelRetestLong;
+  const retestShort=emaRetestShort||levelRetestShort;
+  const rejectionLong=wickLong||(retestLong&&c[n]>o[n]);
+  const rejectionShort=wickShort||(retestShort&&c[n]<o[n]);
+
+  const histSlope=d.hist[n]-d.hist[Math.max(0,n-2)];
+  const trendLong=(tb>0&&mtf.m15>=0&&mtf.h1>=0)||(tb>=.5&&mtf.m15>0);
+  const trendShort=(tb<0&&mtf.m15<=0&&mtf.h1<=0)||(tb<=-.5&&mtf.m15<0);
+
+  let score=50;
+  const breakdown=[];
+  let confirmations=0;
+
+  let trendPts=0;
+  if(tb===1)trendPts=15;else if(tb===.5)trendPts=8;else if(tb===-1)trendPts=-15;else if(tb===-.5)trendPts=-8;
+  if(mtf.m15>0&&mtf.h1>0)trendPts+=8;
+  else if(mtf.m15<0&&mtf.h1<0)trendPts-=8;
+  else if((mtf.m15||0)+(mtf.h1||0)>0)trendPts+=3;
+  else if((mtf.m15||0)+(mtf.h1||0)<0)trendPts-=3;
+  score+=trendPts;
+  if(Math.abs(trendPts)>=12)confirmations++;
+  breakdown.push({label:"Trend",score:Math.round(clamp(12.5+trendPts*.55,0,25)),max:25,text:`5m ${tb>0?"↑":tb<0?"↓":"→"} • 15m ${mtf.m15>0?"↑":mtf.m15<0?"↓":"→"} • 1h ${mtf.h1>0?"↑":mtf.h1<0?"↓":"→"}`});
+
+  let structurePts=0;
+  if(retestLong){structurePts+=12;confirmations++}
+  if(retestShort){structurePts-=12;confirmations++}
+  if(!retestLong&&!retestShort){
+    if(c[n]>c[n-4]&&l[n]>=Math.min(...l.slice(n-4,n)))structurePts=4;
+    else if(c[n]<c[n-4]&&h[n]<=Math.max(...h.slice(n-4,n)))structurePts=-4;
+  }
+  score+=structurePts;
+  breakdown.push({label:"Retest / Yapı",score:Math.round(clamp(10+structurePts*.65,0,20)),max:20,text:retestLong?"LONG retest oluştu":retestShort?"SHORT retest oluştu":"Retest bekleniyor"});
+
+  let rejectPts=0;
+  if(rejectionLong){rejectPts=9;confirmations++}
+  else if(rejectionShort){rejectPts=-9;confirmations++}
+  score+=rejectPts;
+  breakdown.push({label:"Fitil / Tepki",score:Math.round(clamp(7.5+rejectPts*.7,0,15)),max:15,text:rejectionLong?"Aşağı fitil + güçlü kapanış":rejectionShort?"Yukarı fitil + satış kapanışı":"Net rejection yok"});
+
+  let momentumPts=0;
+  if(d.r[n]>=48&&d.r[n]<=64&&histSlope>0)momentumPts=7;
+  else if(d.r[n]<=52&&d.r[n]>=36&&histSlope<0)momentumPts=-7;
+  else if(d.r[n]>69)momentumPts=-2;
+  else if(d.r[n]<31)momentumPts=2;
+  score+=momentumPts;
+  if(Math.abs(momentumPts)>=6)confirmations++;
+  breakdown.push({label:"Momentum",score:Math.round(clamp(7.5+momentumPts*.7,0,15)),max:15,text:`RSI ${Number(d.r[n]||0).toFixed(1)} • MACD ivme ${histSlope>0?"↑":histSlope<0?"↓":"→"}`});
+
+  let flowPts=0;
+  if(rv>=.9&&rv<=2.2){
+    if(c[n]>o[n])flowPts=5;
+    else if(c[n]<o[n])flowPts=-5;
+    if(rv>=1.05)confirmations++;
+  }
+  score+=flowPts;
+  breakdown.push({label:"Hacim",score:Math.round(clamp(7.5+flowPts,0,15)),max:15,text:`RVOL ${rv.toFixed(2)}x • ${rv<.8?"zayıf":rv>2.4?"aşırı":"uygun"}`});
 
   let adxPts=0;
   if(Number.isFinite(adxV)){
-    const str=clamp((adxV-18)/18,0,1);
-    if(p>m)adxPts=12*str;else if(m>p)adxPts=-12*str;
-    if(adxV>=20)confirmations++;
+    const strength=clamp((adxV-17)/18,0,1);
+    adxPts=(p>m?1:-1)*5*strength;
+    if(adxV>=18)confirmations++;
   }
-  score+=adxPts;breakdown.push({label:"ADX / DI",score:Math.round(10+adxPts*.83),max:20,text:Number.isFinite(adxV)?`ADX ${adxV.toFixed(1)} • ${p>m?"DI+":"DI-"} üstün`:"ADX hazır değil"});
-
-  let structPts=0;
-  if(breakoutUp){structPts=15;confirmations++}
-  else if(breakoutDn){structPts=-15;confirmations++}
-  else {
-    const higher=c[n]>c[n-5]&&l[n]>Math.min(...l.slice(n-5,n)),lower=c[n]<c[n-5]&&h[n]<Math.max(...h.slice(n-5,n));
-    if(higher)structPts=7;else if(lower)structPts=-7;
-  }
-  score+=structPts;breakdown.push({label:"Market Structure",score:Math.round(10+structPts*.67),max:20,text:breakoutUp?"20 mum yukarı kırılım":breakoutDn?"20 mum aşağı kırılım":structPts>0?"Yükselen yapı":structPts<0?"Düşen yapı":"Range"});
-
-  let momPts=0;
-  const histSlope=d.hist[n]-d.hist[n-2];
-  if(d.r[n]>=54&&d.r[n]<=68&&histSlope>0)momPts=8;
-  else if(d.r[n]<=46&&d.r[n]>=32&&histSlope<0)momPts=-8;
-  else if(d.r[n]>72)momPts=-3;
-  else if(d.r[n]<28)momPts=3;
-  if(Math.abs(momPts)>=6)confirmations++;
-  score+=momPts;breakdown.push({label:"Momentum",score:Math.round(5+momPts*.625),max:10,text:`RSI ${d.r[n].toFixed(1)} • MACD ivme ${histSlope>0?"↑":histSlope<0?"↓":"→"}`});
-
-  let volPts=0;
-  const candleDir=c[n]>o[n]?1:c[n]<o[n]?-1:0;
-  if(rv>=1.15){volPts=clamp((rv-1)*8,0,7)*candleDir;if(candleDir)confirmations++}
-  else if(rv<.75)volPts=0;
-  score+=volPts;breakdown.push({label:"RVOL / Hacim",score:Math.round(10+volPts),max:20,text:`RVOL ${rv.toFixed(2)}x`});
-
-  const mtfSum=(mtf.m15||0)+(mtf.h1||0);
-  let mtfPts=0;
-  if(mtf.m15>0&&mtf.h1>0){mtfPts=10;confirmations++}
-  else if(mtf.m15<0&&mtf.h1<0){mtfPts=-10;confirmations++}
-  else if(mtfSum>0)mtfPts=4;else if(mtfSum<0)mtfPts=-4;
-  score+=mtfPts;breakdown.push({label:"15m / 1h",score:Math.round(7.5+mtfPts*.75),max:15,text:`15m ${mtf.m15>0?"↑":mtf.m15<0?"↓":"→"} • 1h ${mtf.h1>0?"↑":mtf.h1<0?"↓":"→"}`});
-
-  let volRegime="Uygun";
-  if(atrPct<.18)volRegime="Çok düşük volatilite";
-  else if(atrPct>3.0)volRegime="Aşırı volatilite";
-  breakdown.push({label:"Volatilite",score:atrPct>=.18&&atrPct<=2.4?5:2,max:5,text:`ATR ${atrPct.toFixed(2)}% • ${volRegime}`});
-
-  const blockers=[];
-  if(Number.isFinite(adxV)&&adxV<17&&!breakoutUp&&!breakoutDn)blockers.push("ADX düşük / yatay piyasa");
-  if(atrPct<.15)blockers.push("Volatilite çok düşük");
-  if(atrPct>3.2)blockers.push("Volatilite aşırı yüksek");
-  if(rv<.70&&!breakoutUp&&!breakoutDn)blockers.push("Hacim zayıf");
-  if(bodyAtr>2.1)blockers.push("Anormal büyük mum");
-  if(dist20>1.65&&!(rv>=1.4&&(breakoutUp||breakoutDn)))blockers.push("EMA20'den aşırı uzak");
-  if(d.r[n]>76&&score>50)blockers.push("LONG için aşırı alım");
-  if(d.r[n]<24&&score<50)blockers.push("SHORT için aşırı satım");
-  if(score>=68&&mtf.m15<0&&mtf.h1<0)blockers.push("15m ve 1h LONG'a ters");
-  if(score<=32&&mtf.m15>0&&mtf.h1>0)blockers.push("15m ve 1h SHORT'a ters");
+  score+=adxPts;
+  breakdown.push({label:"Trend Gücü",score:Math.round(clamp(5+adxPts,0,10)),max:10,text:Number.isFinite(adxV)?`ADX ${adxV.toFixed(1)}`:"ADX hazır değil"});
 
   score=Math.round(clamp(score,0,100));
-  let signal="BEKLE",label="BEKLE";
-  const longCandidate=score>=cfg.candidateLong,shortCandidate=score<=cfg.candidateShort;
-  const longStrong=score>=cfg.strongLong,shortStrong=score<=cfg.strongShort;
-  if(!blockers.length&&confirmations>=cfg.minConf){
-    if(longStrong){signal="LONG";label="GÜÇLÜ LONG"}
-    else if(shortStrong){signal="SHORT";label="GÜÇLÜ SHORT"}
-    else if(longCandidate){signal="LONG";label="LONG ADAYI"}
-    else if(shortCandidate){signal="SHORT";label="SHORT ADAYI"}
+
+  const blockers=[];
+  const warnings=[];
+  const likelyLong=score>=50;
+  const likelyShort=score<50;
+
+  if(Number.isFinite(adxV)&&adxV<17)blockers.push("Yatay piyasa / ADX düşük");
+  if(atrPct<.15)blockers.push("Volatilite çok düşük");
+  if(atrPct>3.2)blockers.push("Volatilite aşırı yüksek");
+  if(rv<.72)blockers.push("Hacim zayıf");
+  if(bodyAtr>1.75)blockers.push("Anormal büyük mum");
+
+  if(likelyLong&&dist20Signed>.72)blockers.push("GEÇ KALINDI • fiyat EMA20'den fazla uzak");
+  if(likelyShort&&dist20Signed<-.72)blockers.push("GEÇ KALINDI • fiyat EMA20'den fazla uzak");
+  if(likelyLong&&move3>1.35&&!retestLong)blockers.push("PUMP KOVALAMA • son 3 mum fazla yükseldi");
+  if(likelyShort&&move3<-1.35&&!retestShort)blockers.push("DUMP KOVALAMA • son 3 mum fazla düştü");
+  if(likelyLong&&d.r[n]>69)blockers.push("RSI yüksek • LONG kovalanmıyor");
+  if(likelyShort&&d.r[n]<31)blockers.push("RSI düşük • SHORT kovalanmıyor");
+  if(likelyLong&&mtf.m15<0&&mtf.h1<0)blockers.push("15m + 1h LONG'a ters");
+  if(likelyShort&&mtf.m15>0&&mtf.h1>0)blockers.push("15m + 1h SHORT'a ters");
+
+  if(upperWickPct>.48&&likelyLong)warnings.push("Üst fitil güçlü • satış baskısı var");
+  if(lowerWickPct>.48&&likelyShort)warnings.push("Alt fitil güçlü • alım tepkisi var");
+  if(Math.abs(move5)>2.1)warnings.push("Son 5 mum hareketi aşırı geniş");
+
+  const trend=score>=64?"LONG":score<=36?"SHORT":"NÖTR";
+  let stage="İZLE";
+  let signal="BEKLE";
+  let label="BEKLE";
+
+  const longQuality=trend==="LONG"&&trendLong&&retestLong&&rejectionLong&&d.r[n]<=69&&rv>=.8&&confirmations>=Math.max(4,cfg.minConf);
+  const shortQuality=trend==="SHORT"&&trendShort&&retestShort&&rejectionShort&&d.r[n]>=31&&rv>=.8&&confirmations>=Math.max(4,cfg.minConf);
+
+  if(trend==="LONG"){
+    if(retestLong)stage="HAZIR";
+    if(longQuality&&!blockers.length&&score>=Math.max(76,cfg.candidateLong)){stage="AL";signal="LONG";label=score>=Math.max(84,cfg.strongLong)?"GÜÇLÜ LONG":"LONG"}
+  }else if(trend==="SHORT"){
+    if(retestShort)stage="HAZIR";
+    if(shortQuality&&!blockers.length&&score<=Math.min(24,cfg.candidateShort)){stage="SAT";signal="SHORT";label=score<=Math.min(16,cfg.strongShort)?"GÜÇLÜ SHORT":"SHORT"}
   }
-  return {score,label,signal,breakdown,blockers,confirmations,profile:cfg.name,thresholds:cfg,metrics:{adx:adxV,rvol:rv,atrPct,bodyAtr,dist20,mtf15:mtf.m15,mtf1h:mtf.h1}}
+
+  return {
+    score,label,signal,trend,stage,breakdown,blockers,warnings,confirmations,profile:cfg.name,thresholds:cfg,
+    setup:{retestLong,retestShort,rejectionLong,rejectionShort,emaRetestLong,emaRetestShort,levelRetestLong,levelRetestShort},
+    metrics:{adx:adxV,rvol:rv,atrPct,bodyAtr,dist20,dist20Signed,move3,move5,upperWickPct,lowerWickPct,mtf15:mtf.m15,mtf1h:mtf.h1}
+  }
 }
 function commonDecision(legacy,advanced){
-  let decision="BEKLE",note="V7 filtreleri işlem teyidi vermedi.";
-  const opp=legacy.signal!=="BEKLE"&&advanced.signal!=="BEKLE"&&legacy.signal!==advanced.signal;
-  if(opp){note="7'li sistem ile V7 ters yönde; işlem iptal."}
-  else if(advanced.signal==="LONG"&&legacy.signal!=="SHORT"){
-    decision=advanced.score>=advanced.thresholds.strongLong?"GÜÇLÜ LONG":"LONG";
-    note=legacy.signal==="LONG"?"V7 + 7'li sistem LONG uyumlu.":"V7 LONG; 7'li sistem karşı değil.";
+  let decision="BEKLE";
+  let note=`V10 • ${advanced.trend} trend • ${advanced.stage}`;
+  if(advanced.signal==="LONG"&&legacy.signal!=="SHORT"){
+    decision=advanced.label.includes("GÜÇLÜ")?"GÜÇLÜ LONG":"LONG";
+    note="V10 retest + rejection LONG teyidi.";
   }else if(advanced.signal==="SHORT"&&legacy.signal!=="LONG"){
-    decision=advanced.score<=advanced.thresholds.strongShort?"GÜÇLÜ SHORT":"SHORT";
-    note=legacy.signal==="SHORT"?"V7 + 7'li sistem SHORT uyumlu.":"V7 SHORT; 7'li sistem karşı değil.";
-  }else if(advanced.blockers?.length){note="BEKLE • "+advanced.blockers.slice(0,2).join(" • ")}
-  const confidence=decision==="BEKLE"?Math.round(clamp(50+Math.abs(advanced.score-50)*.45,50,70)):Math.round(clamp(60+Math.abs(advanced.score-50)*.8+advanced.confirmations*2,65,94));
-  return {decision,confidence,note}
+    decision=advanced.label.includes("GÜÇLÜ")?"GÜÇLÜ SHORT":"SHORT";
+    note="V10 retest + rejection SHORT teyidi.";
+  }else if(advanced.blockers?.length){
+    note=`${advanced.stage} • ${advanced.blockers.slice(0,2).join(" • ")}`;
+  }else if(advanced.stage==="HAZIR"){
+    note=`HAZIR • ${advanced.trend} yönlü retest var, son giriş teyidi bekleniyor.`;
+  }else if(advanced.trend!=="NÖTR"){
+    note=`İZLE • trend ${advanced.trend}, uygun retest bekleniyor.`;
+  }else{
+    note="İZLE • trend yeterince net değil.";
+  }
+  const base=decision==="BEKLE"?55:72;
+  const confidence=Math.round(clamp(base+Math.abs(advanced.score-50)*.45+(advanced.confirmations||0)*1.2-(advanced.blockers?.length||0)*5,50,94));
+  return {decision,confidence,note,trend:advanced.trend,stage:advanced.stage}
 }
-function smartLevels(d,h,l,c,n,decision){
-  const price=c[n],a=d.atrV[n]||price*.005,e20=d.e20[n],res=Math.max(...h.slice(n-20,n)),sup=Math.min(...l.slice(n-20,n));
+
+function microTriggerFromKlines(k1m, direction){
+  if(!Array.isArray(k1m)||k1m.length<80)return {ok:false,stage:"İZLE",reason:"1m veri yetersiz"};
+  const u=unpack(k1m,true);
+  const d=calcAll(u.o,u.h,u.l,u.c,u.v);
+  const n=u.c.length-1;
+  if(n<30)return {ok:false,stage:"İZLE",reason:"1m veri yetersiz"};
+  const a=d.atrV[n]||Math.max(u.c[n]*.0025,1e-12);
+  const range=Math.max(u.h[n]-u.l[n],1e-12);
+  const lowerWick=Math.max(0,Math.min(u.o[n],u.c[n])-u.l[n]);
+  const upperWick=Math.max(0,u.h[n]-Math.max(u.o[n],u.c[n]));
+  const closePos=(u.c[n]-u.l[n])/range;
+  const rsi=d.r[n];
+  const rv=d.vma[n]?u.v[n]/d.vma[n]:1;
+  const dist=(u.c[n]-d.e20[n])/a;
+  const move2=(u.c[n]-u.c[Math.max(0,n-2)])/a;
+  const histSlope=d.hist[n]-d.hist[Math.max(0,n-2)];
+
+  const longRetest=u.l[n]<=d.e20[n]+.12*a && u.c[n]>=d.e20[n] && closePos>=.60;
+  const shortRetest=u.h[n]>=d.e20[n]-.12*a && u.c[n]<=d.e20[n] && closePos<=.40;
+  const longReject=(lowerWick/range>=.22 || u.c[n]>u.o[n]) && closePos>=.60;
+  const shortReject=(upperWick/range>=.22 || u.c[n]<u.o[n]) && closePos<=.40;
+
+  const blockers=[];
+  if(rv<.65)blockers.push("1m hacim zayıf");
+  if(direction==="LONG"&&rsi>72)blockers.push("1m RSI yüksek");
+  if(direction==="SHORT"&&rsi<28)blockers.push("1m RSI düşük");
+  if(direction==="LONG"&&dist>.60)blockers.push("1m giriş kaçtı");
+  if(direction==="SHORT"&&dist<-.60)blockers.push("1m giriş kaçtı");
+  if(direction==="LONG"&&move2>1.05&&!longRetest)blockers.push("1m pump kovalanmıyor");
+  if(direction==="SHORT"&&move2<-1.05&&!shortRetest)blockers.push("1m dump kovalanmıyor");
+
+  let ok=false,stage="İZLE",reason="1m tetikleyici bekleniyor";
+  if(direction==="LONG"){
+    if(longRetest)stage="HAZIR";
+    ok=longRetest&&longReject&&histSlope>=0&&rsi>=43&&rsi<=72&&rv>=.65&&!blockers.length;
+    if(ok){stage="AL";reason="1m retest + alım tepkisi teyit edildi"}
+    else if(stage==="HAZIR")reason="1m retest var, kapanış/momentum teyidi bekleniyor";
+  }else if(direction==="SHORT"){
+    if(shortRetest)stage="HAZIR";
+    ok=shortRetest&&shortReject&&histSlope<=0&&rsi>=28&&rsi<=57&&rv>=.65&&!blockers.length;
+    if(ok){stage="SAT";reason="1m retest + satış tepkisi teyit edildi"}
+    else if(stage==="HAZIR")reason="1m retest var, kapanış/momentum teyidi bekleniyor";
+  }
+
+  return {
+    ok,stage,reason,blockers,
+    price:u.c[n],
+    metrics:{rsi,rv,distEma20Atr:dist,move2Atr:move2,histSlope,closePos},
+    setup:{longRetest,shortRetest,longReject,shortReject}
+  };
+}
+
+function smartLevels(d,h,l,c,n,decision,currentPrice=null){
+  const signalPrice=c[n];
+  const market=Number.isFinite(+currentPrice)&&+currentPrice>0?+currentPrice:signalPrice;
+  const a=d.atrV[n]||Math.max(market*.005,1e-12);
   const side=decision.includes("LONG")?"LONG":decision.includes("SHORT")?"SHORT":"NONE";
-  if(side==="NONE")return {entry:null,entryLow:null,entryHigh:null,stop:null,tp1:null,tp2:null,reason:"V7 işlem teyidi yok"};
-  let entry,reason;
-  if(side==="LONG"){const br=price>res;entry=Math.min(price,br?res+.05*a:e20);reason=br?"Kırılan direncin retesti":"EMA20 geri çekilme bölgesi"}
-  else {const br=price<sup;entry=Math.max(price,br?sup-.05*a:e20);reason=br?"Kırılan desteğin retesti":"EMA20 tepki bölgesi"}
-  const stop=side==="LONG"?entry-1.15*a:entry+1.15*a,tp1=side==="LONG"?entry+1.55*a:entry-1.55*a,tp2=side==="LONG"?entry+2.45*a:entry-2.45*a;
-  return {entry,entryLow:entry-.10*a,entryHigh:entry+.10*a,stop,tp1,tp2,reason}
+  if(side==="NONE")return {entry:null,entryLow:null,entryHigh:null,stop:null,tp1:null,tp2:null,rr1:null,rr2:null,reason:"V10: uygun retest + giriş teyidi yok"};
+
+  const chaseAtr=side==="LONG"?(market-signalPrice)/a:(signalPrice-market)/a;
+  if(chaseAtr>.45)return {entry:null,entryLow:null,entryHigh:null,stop:null,tp1:null,tp2:null,rr1:null,rr2:null,reason:"V10: fiyat sinyalden sonra kaçtı • yeni retest bekleniyor",expired:true,distanceAtr:+chaseAtr.toFixed(2)};
+
+  const entry=market;
+  const swingLow=Math.min(...l.slice(Math.max(0,n-5),n+1));
+  const swingHigh=Math.max(...h.slice(Math.max(0,n-5),n+1));
+  let stop,risk;
+  if(side==="LONG"){
+    stop=Math.min(entry-.82*a,swingLow-.12*a);
+    risk=entry-stop;
+  }else{
+    stop=Math.max(entry+.82*a,swingHigh+.12*a);
+    risk=stop-entry;
+  }
+
+  if(!Number.isFinite(risk)||risk<=0||risk>1.65*a){
+    return {entry:null,entryLow:null,entryHigh:null,stop:null,tp1:null,tp2:null,rr1:null,rr2:null,reason:"V10: yapısal stop fazla geniş • işlem yok"};
+  }
+
+  const tp1=side==="LONG"?entry+1.50*risk:entry-1.50*risk;
+  const tp2=side==="LONG"?entry+2.20*risk:entry-2.20*risk;
+  const zoneHalf=.08*a;
+  return {
+    entry,entryLow:entry-zoneHalf,entryHigh:entry+zoneHalf,
+    stop,tp1,tp2,rr1:1.5,rr2:2.2,
+    reason:"V11 5m Setup • retest + rejection teyitli giriş",
+    marketPrice:market,distanceAtr:+(Math.abs(market-signalPrice)/a).toFixed(2),maxWaitBars:2
+  }
 }
 async function getJson(url){
   const r=await fetch(url);if(!r.ok)throw new Error("Binance veri hatası");return r.json()
@@ -201,7 +356,7 @@ function tfBiasAtSeries(k,atMs){
 }
 function sideOfDecision(x){return x.includes("LONG")?"LONG":x.includes("SHORT")?"SHORT":null}
 function evalTrade(side,entry,a,fh,fl){
-  const sl=side==="LONG"?entry-1.15*a:entry+1.15*a,tp=side==="LONG"?entry+1.55*a:entry-1.55*a;
+  const sl=side==="LONG"?entry-1.0*a:entry+1.0*a,tp=side==="LONG"?entry+1.50*a:entry-1.50*a;
   for(let i=0;i<fh.length;i++){
     const h=fh[i],l=fl[i];
     if(side==="LONG"){const s=l<=sl,t=h>=tp;if(s&&t)return"LOSS";if(s)return"LOSS";if(t)return"WIN"}
@@ -211,8 +366,8 @@ function evalTrade(side,entry,a,fh,fl){
 }
 function summarize(trades){
   const r=trades.filter(x=>x!=="OPEN"),w=r.filter(x=>x==="WIN").length,l=r.filter(x=>x==="LOSS").length;
-  const wr=r.length?w/r.length*100:0,gp=w*1.55,gl=l*1.15,pf=gl?gp/gl:(gp?99:0);
-  const expectancy=r.length?(w*1.55-l*1.15)/r.length:0;
+  const wr=r.length?w/r.length*100:0,gp=w*1.50,gl=l*1.00,pf=gl?gp/gl:(gp?99:0);
+  const expectancy=r.length?(w*1.50-l*1.00)/r.length:0;
   return {signals:trades.length,resolved:r.length,wins:w,losses:l,open:trades.length-r.length,winRate:+wr.toFixed(1),profitFactor:+pf.toFixed(2),expectancyR:+expectancy.toFixed(2)}
 }
 export default async function handler(req,res){
@@ -242,7 +397,7 @@ export default async function handler(req,res){
     res.setHeader("Cache-Control","no-store");
     return res.status(200).json({
       symbol,interval,candles:k.length,horizon,
-      methodology:`V7.1 ${profile}: kapanmış mum + 15m/1h teyidi + rejim filtreleri. Giriş sonraki mum açılışı; TP=1.55 ATR, SL=1.15 ATR; aynı mumda ikisi görülürse LOSS.`,
+      methodology:`V11 5m Setup ${profile}: kapanmış mum + 15m/1h trend + retest + wick rejection + anti-chase + RSI filtresi. Giriş sonraki mum açılışı; TP=1.50R, SL=1.00R; aynı mumda ikisi görülürse LOSS.`,
       profile,
       legacy:summarize(legacyTrades),advanced:summarize(advancedTrades),common:summarize(commonTrades),
       timestamp:new Date().toISOString()
