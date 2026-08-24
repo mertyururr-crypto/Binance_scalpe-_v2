@@ -430,7 +430,11 @@ async function testnetAccount(req){
     walletBalance:Number(usdt.balance||0),
     availableBalance:Number(usdt.availableBalance||0),
     openPositions,
-    openOrders:(orders||[]).map(x=>({symbol:x.symbol,orderId:x.orderId,type:x.type,side:x.side,stopPrice:Number(x.stopPrice||0),origQty:Number(x.origQty||0),status:x.status})),
+    openOrders:(orders||[]).map(x=>({
+      symbol:x.symbol,orderId:x.orderId,clientOrderId:x.clientOrderId,type:x.type,side:x.side,
+      price:Number(x.price||0),stopPrice:Number(x.stopPrice||0),
+      origQty:Number(x.origQty||0),executedQty:Number(x.executedQty||0),status:x.status
+    })),
     algoOrders:(algoOrders||[]).map(x=>({
       symbol:x.symbol,
       algoId:x.algoId,
@@ -460,7 +464,11 @@ async function testnetOpen(req){
   const body=req.body||{};
   const symbol=String(body.symbol||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
   const direction=String(body.direction||"").toUpperCase();
+  const positionMode=String(body.positionMode||"risk").toLowerCase()==="fixed"?"fixed":"risk";
+  const entryType=String(body.entryType||"market").toLowerCase()==="limit"?"limit":"market";
+  const requestedEntry=Number(body.entryPrice);
   const riskPct=Math.max(.1,Math.min(2,Number(body.riskPercent)||.5));
+  const fixedNotional=Math.max(5,Number(body.fixedNotional)||0);
   const leverage=Math.max(1,Math.min(20,Math.round(Number(body.leverage)||5)));
   const stop=Number(body.stop),tp1=Number(body.tp1),tp2=Number(body.tp2);
   if(!/^[A-Z0-9]{5,20}$/.test(symbol))throw new Error("Geçersiz sembol.");
@@ -484,26 +492,46 @@ async function testnetOpen(req){
   const mark=Number(markInfo.markPrice);
   if(!Number.isFinite(mark)||mark<=0)throw new Error("Mark price alınamadı.");
 
-  if(direction==="LONG" && !(stop<mark&&tp1>mark&&tp2>mark))throw new Error("LONG için SL fiyatın altında, hedefler fiyatın üstünde olmalı.");
-  if(direction==="SHORT" && !(stop>mark&&tp1<mark&&tp2<mark))throw new Error("SHORT için SL fiyatın üstünde, hedefler fiyatın altında olmalı.");
+  const entryRef=entryType==="limit"?requestedEntry:mark;
+  if(!Number.isFinite(entryRef)||entryRef<=0)throw new Error("Giriş fiyatı geçersiz.");
+  if(direction==="LONG" && !(stop<entryRef&&tp1>entryRef&&tp2>entryRef))throw new Error("LONG için SL giriş fiyatının altında, hedefler giriş fiyatının üstünde olmalı.");
+  if(direction==="SHORT" && !(stop>entryRef&&tp1<entryRef&&tp2<entryRef))throw new Error("SHORT için SL giriş fiyatının üstünde, hedefler giriş fiyatının altında olmalı.");
 
   const riskUsd=available*(riskPct/100);
-  const stopDistance=Math.abs(mark-stop);
+  const stopDistance=Math.abs(entryRef-stop);
   if(stopDistance<=0)throw new Error("Stop mesafesi geçersiz.");
 
-  let qty=riskUsd/stopDistance;
   const maxNotional=Math.min(10000,available*leverage*.95);
-  qty=Math.min(qty,maxNotional/mark);
+  let requestedNotional=null;
+  let qty;
+
+  if(positionMode==="fixed"){
+    requestedNotional=fixedNotional;
+    if(!Number.isFinite(requestedNotional)||requestedNotional<=0)throw new Error("Sabit USDT tutarı geçersiz.");
+    if(requestedNotional>maxNotional){
+      throw new Error(`Yetersiz teminat. ${leverage}x kaldıraçla maksimum yaklaşık ${maxNotional.toFixed(2)} USDT pozisyon açılabilir.`);
+    }
+    qty=requestedNotional/entryRef;
+  }else{
+    qty=riskUsd/stopDistance;
+    qty=Math.min(qty,maxNotional/entryRef);
+  }
+
   qty=floorStep(qty,rules.stepSize);
   if(qty<rules.minQty)throw new Error("Hesaplanan miktar minimum emir miktarının altında.");
-  if(qty*mark<rules.minNotional)throw new Error(`Emir nominali minimum ${rules.minNotional} USDT altında.`);
+  if(qty*entryRef<rules.minNotional)throw new Error(`Emir nominali minimum ${rules.minNotional} USDT altında.`);
 
+  const roundedEntry=entryType==="limit"?roundTick(requestedEntry,rules.tickSize):mark;
   const roundedStop=roundTick(stop,rules.tickSize);
   const roundedTp1=roundTick(tp1,rules.tickSize);
   const roundedTp2=roundTick(tp2,rules.tickSize);
 
-  if(![roundedStop,roundedTp1,roundedTp2].every(x=>Number.isFinite(x)&&x>0)){
-    throw new Error(`Fiyat hassasiyeti hatası: SL/TP sıfır veya geçersiz oluştu. tickSize=${rules.tickSize}`);
+  if(![roundedEntry,roundedStop,roundedTp1,roundedTp2].every(x=>Number.isFinite(x)&&x>0)){
+    throw new Error(`Fiyat hassasiyeti hatası: giriş/SL/TP sıfır veya geçersiz oluştu. tickSize=${rules.tickSize}`);
+  }
+  if(entryType==="limit"){
+    if(direction==="LONG" && roundedEntry>=mark)throw new Error(`LONG limit giriş fiyatı mevcut Mark fiyatından (${mark}) düşük olmalı.`);
+    if(direction==="SHORT" && roundedEntry<=mark)throw new Error(`SHORT limit giriş fiyatı mevcut Mark fiyatından (${mark}) yüksek olmalı.`);
   }
 
   await futSigned("POST","/fapi/v1/leverage",{symbol,leverage},env);
@@ -512,12 +540,31 @@ async function testnetOpen(req){
   const exitSide=direction==="LONG"?"SELL":"BUY";
   let entryOrder=null;
   try{
-    entryOrder=await futSigned("POST","/fapi/v1/order",{
-      symbol,side:entrySide,type:"MARKET",quantity:qty,newOrderRespType:"RESULT"
-    },env);
+    if(entryType==="limit"){
+      entryOrder=await futSigned("POST","/fapi/v1/order",{
+        symbol,side:entrySide,type:"LIMIT",timeInForce:"GTC",price:roundedEntry,quantity:qty,newOrderRespType:"RESULT"
+      },env);
+    }else{
+      entryOrder=await futSigned("POST","/fapi/v1/order",{
+        symbol,side:entrySide,type:"MARKET",quantity:qty,newOrderRespType:"RESULT"
+      },env);
+    }
 
-    const executedQty=floorStep(Number(entryOrder.executedQty||qty),rules.stepSize);
-    const halfQty=floorStep(executedQty*.5,rules.stepSize);
+    const executedQty=floorStep(Number(entryOrder.executedQty||0),rules.stepSize);
+    if(entryType==="limit" && executedQty<=0){
+      return {
+        testnet:true,pending:true,symbol,direction,leverage,positionMode,entryType,
+        requestedEntry:roundedEntry,riskPercent:riskPct,riskUsd,
+        requestedNotional:positionMode==="fixed"?fixedNotional:null,
+        markPrice:mark,quantity:qty,notional:qty*roundedEntry,
+        estimatedMargin:(qty*roundedEntry)/leverage,
+        stop:roundedStop,tp1:roundedTp1,tp2:roundedTp2,
+        entryOrder,protectiveOrders:[]
+      };
+    }
+
+    const protectedQty=floorStep(executedQty>0?executedQty:qty,rules.stepSize);
+    const halfQty=floorStep(protectedQty*.5,rules.stepSize);
 
     const protective=[];
     protective.push(await futSigned("POST","/fapi/v1/algoOrder",{
@@ -557,8 +604,13 @@ async function testnetOpen(req){
     },env));
 
     return {
-      testnet:true,symbol,direction,leverage,riskPercent:riskPct,riskUsd,
-      markPrice:mark,quantity:executedQty,notional:executedQty*mark,
+      testnet:true,symbol,direction,leverage,positionMode,entryType,
+      riskPercent:riskPct,riskUsd,
+      requestedNotional:positionMode==="fixed"?fixedNotional:null,
+      requestedEntry:entryType==="limit"?roundedEntry:null,
+      markPrice:mark,quantity:protectedQty,
+      notional:protectedQty*(Number(entryOrder.avgPrice)||roundedEntry||mark),
+      estimatedMargin:(protectedQty*(Number(entryOrder.avgPrice)||roundedEntry||mark))/leverage,
       stop:roundedStop,tp1:roundedTp1,tp2:roundedTp2,
       entryOrder,protectiveOrders:protective
     };
@@ -585,10 +637,41 @@ async function testnetClose(req){
   return {testnet:true,symbol,closed:true,previousPositionAmt:amt};
 }
 
+
+async function testnetProtect(req){
+  const env=requireTestnetAuth(req);
+  const body=req.body||{};
+  const symbol=String(body.symbol||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+  const direction=String(body.direction||"").toUpperCase();
+  const stop=Number(body.stop),tp1=Number(body.tp1),tp2=Number(body.tp2);
+  const positions=await futSigned("GET","/fapi/v2/positionRisk",{symbol},env);
+  const p=Array.isArray(positions)?positions.find(x=>x.symbol===symbol):null;
+  const amt=Number(p?.positionAmt||0);
+  if(!amt)throw new Error("Pozisyon henüz gerçekleşmemiş.");
+  const existing=await futSigned("GET","/fapi/v1/openAlgoOrders",{algoType:"CONDITIONAL"},env).catch(()=>[]);
+  if((existing||[]).some(x=>x.symbol===symbol))return {alreadyProtected:true,symbol};
+  const rules=await testnetSymbolRules(symbol);
+  const qty=floorStep(Math.abs(amt),rules.stepSize);
+  const halfQty=floorStep(qty*.5,rules.stepSize);
+  const markInfo=await futPublic("/fapi/v1/premiumIndex",{symbol});
+  const mark=Number(markInfo.markPrice);
+  const rs=roundTick(stop,rules.tickSize),r1=roundTick(tp1,rules.tickSize),r2=roundTick(tp2,rules.tickSize);
+  if(direction==="LONG" && !(amt>0&&rs<mark&&r1>mark&&r2>mark))throw new Error("LONG koruma seviyeleri geçersiz.");
+  if(direction==="SHORT" && !(amt<0&&rs>mark&&r1<mark&&r2<mark))throw new Error("SHORT koruma seviyeleri geçersiz.");
+  const exitSide=direction==="LONG"?"SELL":"BUY";
+  const protective=[];
+  protective.push(await futSigned("POST","/fapi/v1/algoOrder",{algoType:"CONDITIONAL",symbol,side:exitSide,type:"STOP_MARKET",triggerPrice:rs,closePosition:"true",workingType:"MARK_PRICE",newOrderRespType:"ACK"},env));
+  if(halfQty>=rules.minQty && halfQty*mark>=rules.minNotional){
+    protective.push(await futSigned("POST","/fapi/v1/algoOrder",{algoType:"CONDITIONAL",symbol,side:exitSide,type:"TAKE_PROFIT_MARKET",triggerPrice:r1,quantity:halfQty,reduceOnly:"true",workingType:"MARK_PRICE",newOrderRespType:"ACK"},env));
+  }
+  protective.push(await futSigned("POST","/fapi/v1/algoOrder",{algoType:"CONDITIONAL",symbol,side:exitSide,type:"TAKE_PROFIT_MARKET",triggerPrice:r2,closePosition:"true",workingType:"MARK_PRICE",newOrderRespType:"ACK"},env));
+  return {protected:true,symbol,quantity:qty,protectiveOrders:protective};
+}
+
 export default async function handler(req,res){
   try{
     const action=String(req.query.action||req.body?.action||"");
-    if(["analyze","backtest","scan","testnet-account","testnet-open","testnet-close"].includes(action) && req.method!=="POST"){
+    if(["analyze","backtest","scan","testnet-account","testnet-open","testnet-close","testnet-protect"].includes(action) && req.method!=="POST"){
       return res.status(405).json({error:"POST gerekli."});
     }
     let result;
@@ -598,6 +681,7 @@ export default async function handler(req,res){
     else if(action==="testnet-account")result=await testnetAccount(req);
     else if(action==="testnet-open")result=await testnetOpen(req);
     else if(action==="testnet-close")result=await testnetClose(req);
+    else if(action==="testnet-protect")result=await testnetProtect(req);
     else return res.status(400).json({error:"Geçersiz action."});
     res.setHeader("Cache-Control","no-store");
     return res.status(200).json(result);
